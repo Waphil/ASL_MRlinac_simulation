@@ -14,15 +14,15 @@ def t1a_estimate(b0, model_id):
     if model_id == 1:
         # Fit based on 1.5T, 3T, 7T data (Zhang et al.)
         t1 = 110 * b0 + 1316
-        t1 = np.around(t1) # TODO: think about if I want to remove the rounding. Philip had it.
+        #t1 = np.around(t1) # TODO: think about if I want to remove the rounding. Philip had it.
         return t1
     elif model_id == 2:
         # (Rooney et al.)
         a = 3.35 # ms
         b = 0.340
-        gamma = 42.58*1e6 # (gyromagnetic ratio) # TODO: check if this is the correct value
+        gamma = 42.58*1e6 # (gyromagnetic ratio)
         t1 = a*np.pow(gamma*b0, b)
-        t1 = np.around(t1) # TODO: think about if I want to remove the rounding. Philip had it.
+        #t1 = np.around(t1) # TODO: think about if I want to remove the rounding. Philip had it.
         return t1
     elif model_id == 3:
         # Model between 1.5T and 7T.
@@ -33,7 +33,7 @@ def t1a_estimate(b0, model_id):
         R1p = fe * (1.099 - 0.057 * b0 + 0.033 * Hb * (1 - Y)) + (1 - fe) * (0.496 - 0.023 * b0)
         dT1 = 108 #[ms] (in vivo correction)
         t1 = 1000. / R1p + dT1
-        t1 = np.around(t1) # TODO: think about if I want to remove the rounding. Philip had it.
+        #t1 = np.around(t1) # TODO: think about if I want to remove the rounding. Philip had it.
         return t1
 
 def t2a_estimate(b0, model_id):
@@ -44,15 +44,18 @@ def t2a_estimate(b0, model_id):
     :return:
     """
     if model_id == 1:
-        # Value measured in Brooks et al. / Approximate value of Varghese et al.
-        return 1000 / 4
-    elif model_id == 2: # TODO: check it out
-        # Model by Thomas et al.
+        # Value measured in Brooks et al. (10.1002/jmri.1880050414)
+        return 1000 / 4.
+    elif model_id == 2:
+        # Model by Thomas et al. (10.1007/s10334-021-00993-2)
+        # I actually can't replicate the b0 formula shown here by Philip. It looks more like arterial blood (about 100%
+        # sO2) should have an R2 between 3.2 Hz and 4. Hz for 0.35T, as extrapolated from their Fig. 3.
+        # Table 3 also suggests a T2 between 210 ms and 300 ms.
         Y = 0.99 # (oyxgen saturation)
-        T20 = 270 # [ms](intrinsic T2 of blood)
-        R2 = 1000 / T20 + (0.25 * np.pow(b0 / 0.2, 1.5)) * Y * Y; # (approximated)
+        T20 = 270. # [ms](intrinsic T2 of blood)
+        R2 = 1000. / T20 + (0.25 * np.pow(b0 / 0.2, 1.5)) * Y * Y # (approximated)
         T2 = 1000. / R2
-        T2 = np.around(T2) # TODO: think about if I want to remove the rounding. Philip had it.
+        #T2 = np.around(T2) # TODO: think about if I want to remove the rounding. Philip had it.
         return T2
 
 def calculate_fwhm(x_arr, y_arr):
