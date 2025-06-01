@@ -197,10 +197,11 @@ def simulate_bssfp_inversion_longerm_steadystate(m0, fa, tr, te, ti, t1, t2, td,
 
     return s_arr, m0_arr
 
-def simulate_fair_bssfp_signal_difference(m0, fa, tr, te, ti, ti1, t1a, t2a,
-                                          inv_eff, perf, partition_coef, delta_t, tau, q=1.):
+def simulate_fair_bssfp_signal_difference(m0, fa, tr, ti, t1a, t2a, inv_eff, perf, partition_coef, delta_t, tau,
+                                          q_func=None, n_dummy_tr=0):
     """
     Calculates difference of arterial blood signal between control and tag. Uses PASL and bSSFP signal functions.
+    Does not use the PSF approach
     :param m0: float: equilibrium magnetization
     :param fa: float: Flip angle [°]
     :param tr: float: repetition time [ms]
@@ -218,10 +219,18 @@ def simulate_fair_bssfp_signal_difference(m0, fa, tr, te, ti, ti1, t1a, t2a,
     :return:
     """
     # TODO: Deal with this funciton or delete it. It uses QUIPSS in Philip's implementation, but we don't want that.
-    delta_m = simulate_fair_magnetization_difference()
+    # Calculate decay constant (called lambda in Zhu & Qin's publication)
+    decay_const = calculate_bssfp_decay_const(fa, tr, t1a, t2a)
+    # Calculate the longitudinal magnetization difference between tag and control at the start of the bSSFP readout
+    fair_magnetization_difference = simulate_fair_magnetization_difference(m0, inv_eff, perf, ti, delta_t, tau, t1a,
+                                                                           q_func=q_func)
+
+    multiplication_term = np.pow(decay_const, n_dummy_tr) * np.sin(np.deg2rad(fa/2)) * fair_magnetization_difference
+
+    return multiplication_term
 
 def simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, t1a, t2a, inv_eff, perf, partition_coef, delta_t, tau,
-                                              q_func=None, n_dummy_tr=0, n_tr=96, n_points_psf=100):
+                                              q_func=None, n_dummy_tr=0, n_tr=96, n_points_psf=None):
     """
 
     :param m0: float: equilibrium magnetization
@@ -244,9 +253,11 @@ def simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, t1a, t2a, inv_eff,
     :return:
     """
     # TODO: check the fact that there is no partition coeff here.
+    if n_points_psf is None:
+        n_points_psf = 100*n_tr+1
 
     # Define pixel coordinates for PSF
-    z = np.linspace(-n_tr/2, n_tr/2, n_points_psf*n_tr+1, endpoint=True)
+    z = np.linspace(-n_tr/2, n_tr/2, n_points_psf, endpoint=True)
 
     # Try to adjust the shape of z to be compatible with input parameter shapes that are multi-dimensional.
     # First axis of input parameters has to be length 1 to allow for the z-axis to go there
@@ -254,8 +265,6 @@ def simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, t1a, t2a, inv_eff,
     if ndim_combined_arr > 1:
         z = np.reshape(z, tuple([-1] + [1 for axis in range(ndim_combined_arr-1)]))
 
-    # Calculate steady state magnetization
-    m_steadystate = simulate_bssfp_steady(m0, fa, tr, tr/2., t1a, t2a, False) # Assume TE = TR/2
     # Calculate decay constant (called lambda in Zhu & Qin's publication)
     decay_const = calculate_bssfp_decay_const(fa, tr, t1a, t2a)
     # Calculate the longitudinal magnetization difference between tag and control at the start of the bSSFP readout
@@ -268,5 +277,7 @@ def simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, t1a, t2a, inv_eff,
 
     return (fraction_term * multiplication_term), z
 
-def correction_factor_for_finite_tm(tm, t1, inv_eff=1.0): # TODO: double check, investigate inversion efficiency
-    return 1. / (2. * inv_eff) * (1 + (1 - (2 * inv_eff - 1) * np.exp(-2 * tm / t1)) / (1 + np.exp(-2 * tm / t1))) * (1 - np.exp(-tm / t1))
+def correction_factor_for_finite_tm(tm, t1, inv_eff=1.0):
+    #return 1. / (2. * inv_eff) * (1 + (2 * inv_eff - 1) * (1 - np.exp(-2 * tm / t1)) / (1 + np.exp(-2 * tm / t1))) * (1 - np.exp(-tm / t1))
+    #return (1 + (1./inv_eff - 1) * np.exp(-2 * tm / t1)) / (1 + np.exp(-2 * tm / t1)) * (1 - np.exp(-tm / t1))
+    return (1 - np.exp(-tm / t1)) / (1 + (2*inv_eff - 1) * np.exp(-2 * tm / t1))

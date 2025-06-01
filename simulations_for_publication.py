@@ -2,7 +2,7 @@ import numpy as np
 from util import t1a_estimate, t2a_estimate, calculate_fwhm
 from visualize import basic_multiline_plot
 from fair_bssfp_simulation import (simulate_bssfp_psf, simulate_fair_bssfp_signal_difference_psf,
-                                   correction_factor_for_finite_tm)
+                                   simulate_fair_bssfp_signal_difference, correction_factor_for_finite_tm)
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
@@ -29,6 +29,7 @@ def main():
     # Image settings constants
     n        = 96                   #         (number of pixels in x and y direction)
     t_total  = 6*60*1000.           # [ms]    (total acquisition time constraint set for whole sequence in optimization)
+    is_optimize_based_on_psf = True #         (choose false if you want to optimize based on the k-space center instead)
 
     # Simulation constants
     m0       = 1                    # [A/m]
@@ -65,13 +66,20 @@ def main():
     # Calculate the array corresponding to readout time (tr - t_grad), which is the inverse of the pixelBW
     t_readout_arr = (tr_arr-t_grad)
 
-    psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr_arr, ti_arr, t1a, t2a, inv_eff, perf,
-                                                       partition_coef, delta_t, tau, q_func=None,
-                                                       n_dummy_tr=n_dummy_tr, n_tr=n, n_points_psf=1)
-    z = z.reshape((-1,))
-    psf_max = np.amax(psf, axis=0)
+    if is_optimize_based_on_psf:
+        psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr_arr, ti_arr, t1a, t2a, inv_eff, perf,
+                                                           partition_coef, delta_t, tau, q_func=None,
+                                                           n_dummy_tr=n_dummy_tr, n_tr=n, n_points_psf=3)
+        z = z.reshape((-1,))
+        psf_max = np.amax(psf, axis=0)
+    else:
+        # Need to call it max psf to be compatible with
+        psf_max = simulate_fair_bssfp_signal_difference(m0, fa_arr, tr_arr, ti_arr, t1a, t2a, inv_eff, perf,
+                                                        partition_coef, delta_t, tau, q_func=None,
+                                                        n_dummy_tr=n_dummy_tr)
+        psf_max = psf_max[0]
 
-    snr_arr = psf_max * np.sqrt(n_avg_arr[0] * t_readout_arr[0]) # Have to remove first dimension of avg and readout to match them
+    snr_arr = psf_max * np.sqrt(n_avg_arr[0] * t_readout_arr[0])  # Have to remove first dimension of avg and readout to match them
     snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)
 
     #best_settings_index = np.argmax(snr_finitetm_corr_arr) # hmm, doesn't work
@@ -89,6 +97,8 @@ def main():
           f"TD = {td_arr.ravel()[best_settings_indices[3]]}ms\n"
           f"TM = {tm_arr[0,0][*best_settings_indices[1:]]}ms\n"
           f"N_avg = {n_avg_arr[0,0][*best_settings_indices[1:]]}\n")
+    print(f"The TM correction factor for those settings is "
+          f"{correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)[0][*best_settings_indices[1:]]}")
 
     ###########################
     # Experiment: Variable TR #
@@ -101,7 +111,8 @@ def main():
 
     # Calculating PSFs
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr_arr, ti, t1a, t2a, inv_eff, perf, partition_coef,
-                                                       delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n)
+                                                       delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
+                                                       n_points_psf=None)
     z = z[:, 0]
     psf = psf.T
 
@@ -117,7 +128,7 @@ def main():
     legend_title = f"$\\alpha$ = {fa}°,\n$TR$ $\\left[ms\\right]$"
     legend_kwargs = dict(loc='upper right', fancybox=True, shadow=False, framealpha=1.)
     colors = ["#0072BD","#D95319","#EDB120","#7E2F8E","#77AC30","#4DBEEE","#A2142F"]
-    ax = basic_multiline_plot(z, psf, label_list, # TODO: investigate if should show FWHM
+    ax = basic_multiline_plot(z, psf, label_list,
                          ax=None, figsize=figsize, colors=colors, linestyles=None, alphas=None,
                          title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                          is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
@@ -128,7 +139,6 @@ def main():
         x_coords = np.array([z[fwhm_tuple[1]], z[fwhm_tuple[2]]])
         y_coords = np.array([psf_individual[fwhm_tuple[1]], psf_individual[fwhm_tuple[2]]])
         ax.errorbar(x_coords, y_coords, yerr=fwhm_line_height, ecolor=color, fmt="", linestyle="")
-    #plt.show()
 
     ###########################
     # Experiment: Variable FA #
@@ -140,7 +150,8 @@ def main():
     ti       = 1345 #900
 
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr, ti, t1a, t2a, inv_eff, perf, partition_coef,
-                                                       delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr_arr, n_tr=n)
+                                                       delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr_arr, n_tr=n,
+                                                       n_points_psf=None)
     z = z[:, 0]
     psf = psf.T
 
@@ -166,7 +177,6 @@ def main():
         x_coords = np.array([z[fwhm_tuple[1]], z[fwhm_tuple[2]]])
         y_coords = np.array([psf_individual[fwhm_tuple[1]], psf_individual[fwhm_tuple[2]]])
         ax.errorbar(x_coords, y_coords, yerr=fwhm_line_height, ecolor=color, fmt="", linestyle="")
-    plt.show()
 
     #######################################
     # Experiment: PSF SNR for variable TR #
@@ -202,7 +212,7 @@ def main():
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr_arr, ti, total_t1a_arr, total_t2a_arr,
                                                        inv_eff, perf, partition_coef,
                                                        delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
-                                                       n_points_psf=1)
+                                                       n_points_psf=3)
     z = z[:, 0]
     psf_max_arr = np.amax(psf, axis=0) # Center of PSF is the max value in each case
 
@@ -245,12 +255,12 @@ def main():
     # Define custom legend for aesthetic reasons
     legend_handles = [
         Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
-        Line2D([0], [0], color="#77AC30", marker=None, linestyle="--", label=r"vary $T_1$"),
-        Line2D([0], [0], color="#D95319", marker=None, linestyle="--", label=r"vary $T_2$"),
+        Line2D([0], [0], color="#77AC30", marker=None, linestyle="--",
+               label=f"vary $T_1$ by ±{vary_factor:.0%}"),
+        Line2D([0], [0], color="#D95319", marker=None, linestyle="--",
+               label=f"vary $T_2$ by ±{vary_factor:.0%}"),
     ]
     ax.legend(handles=legend_handles, framealpha=1.)
-
-    plt.show()
 
     #######################################
     # Experiment: PSF SNR for variable FA #
@@ -285,7 +295,7 @@ def main():
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr, ti, total_t1a_arr, total_t2a_arr,
                                                        inv_eff, perf, partition_coef,
                                                        delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
-                                                       n_points_psf=1)
+                                                       n_points_psf=3)
     z = z[:, 0]
     psf_max_arr = np.amax(psf, axis=0) # Center of PSF is the max value in each case
 
@@ -328,12 +338,13 @@ def main():
     # Define custom legend for aesthetic reasons
     legend_handles = [
         Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
-        Line2D([0], [0], color="#77AC30", marker=None, linestyle="--", label=r"vary $T_1$"),
-        Line2D([0], [0], color="#D95319", marker=None, linestyle="--", label=r"vary $T_2$"),
+        Line2D([0], [0], color="#77AC30", marker=None, linestyle="--",
+               label=f"vary $T_1$ by ±{vary_factor:.0%}"),
+        Line2D([0], [0], color="#D95319", marker=None, linestyle="--",
+               label=f"vary $T_2$ by ±{vary_factor:.0%}"),
     ]
     ax.legend(handles=legend_handles, framealpha=1.)
 
-    plt.show()
     #######################################
     # Experiment: PSF SNR for variable TR #
     #######################################
@@ -368,7 +379,7 @@ def main():
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti_arr, total_t1a_arr, total_t2a_arr,
                                                        inv_eff, perf, partition_coef,
                                                        delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
-                                                       n_points_psf=1)
+                                                       n_points_psf=3)
     z = z[:, 0]
     psf_max_arr = np.amax(psf, axis=0)  # Center of PSF is the max value in each case
 
@@ -413,13 +424,52 @@ def main():
     # Define custom legend for aesthetic reasons
     legend_handles = [
         Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
-        Line2D([0], [0], color="#77AC30", marker=None, linestyle="--", label=r"vary $T_1$"),
-        Line2D([0], [0], color="#D95319", marker=None, linestyle="--", label=r"vary $T_2$"),
+        Line2D([0], [0], color="#77AC30", marker=None, linestyle="--",
+               label=f"vary $T_1$ by ±{vary_factor:.0%}"),
+        Line2D([0], [0], color="#D95319", marker=None, linestyle="--",
+               label=f"vary $T_2$ by ±{vary_factor:.0%}"),
     ]
     ax.legend(handles=legend_handles, framealpha=1.)
 
-    plt.show()
+    #############################################
+    # Experiment: PSF FWHM for variable FA & TR #
+    #############################################
 
+    # Parameters
+    fa_arr   = np.linspace(45., 155., num=111, endpoint=True).reshape((1, -1, 1))
+    tr_arr   = np.linspace(5., 8., num=4, endpoint=True).reshape((1, 1, -1))
+    ti   = 1345. #1300
+
+    # Calculating PSFs
+    # Need many points because now we care about width of PSF
+    psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr_arr, ti, t1a, t2a,
+                                                       inv_eff, perf, partition_coef,
+                                                       delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
+                                                       n_points_psf=1000*n)
+    z = z[:, 0]
+    psf = psf.T
+
+    fwhm_arr = np.array([[calculate_fwhm(z, psf_fa)[0][0] for psf_fa in psf_tr] for psf_tr in psf])
+
+    # Plot settings
+    grid_kwargs = dict(which="major", axis="both")
+    x_label = r"$\alpha$ $\left[°\right]$"
+    y_label = r"$FWHM$ of $PSF$ $\left[voxels\right]$"
+    x_lim = [np.amin(fa_arr), np.amax(fa_arr)]
+    y_lim = None
+    label_list = [f"{tr}" for tr in tr_arr.ravel()]
+    legend_title = f"$TR$ $\\left[ms\\right]$"
+    legend_kwargs = dict(loc='upper left', fancybox=True, shadow=False, framealpha=1.)
+    colors = ["#0072BD","#D95319","#EDB120","#7E2F8E"]
+    ax = basic_multiline_plot(fa_arr.ravel(), fwhm_arr, label_list,
+                         ax=None, figsize=figsize, colors=colors, linestyles=None, alphas=None,
+                         title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
+                         is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
+                         x_tick_minor_spacing=None, y_tick_minor_spacing=None,
+                         x_scale=None, y_scale=None, x_lim=x_lim, y_lim=y_lim, labels_fontsize=labels_fontsize,
+                         legend_title=legend_title, legend_kwargs=legend_kwargs, is_show=False)
+
+    plt.show()
 
 if __name__ == "__main__":
     main()
