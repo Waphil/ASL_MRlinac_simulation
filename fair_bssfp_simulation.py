@@ -153,9 +153,15 @@ def calculate_centric_bssfp_psf_large_fraction(z, decay_const, n_tr):
     fraction_upper_term_1 = np.pow(decay_const, n_tr) * n_tr * np.log(decay_const) * np.cos(np.pi*z)
     fraction_upper_term_2 = np.pow(decay_const, n_tr) * np.pi * z * np.sin(np.pi*z)
     fraction_upper_term_3 = - n_tr * np.log(decay_const)
+    fraction_upper_term = fraction_upper_term_1 + fraction_upper_term_2 + fraction_upper_term_3
+
     fraction_lower_term = np.pow(n_tr * np.log(decay_const), 2) + np.pow(np.pi * z, 2)
 
-    fraction_term = (fraction_upper_term_1 + fraction_upper_term_2 + fraction_upper_term_3) / fraction_lower_term
+    fraction_term = fraction_upper_term / fraction_lower_term
+
+    if np.count_nonzero(fraction_lower_term == 0.):  # Fix the divide by 0 error at z=0 when lambda is 1.
+        where_zero_over_zero_arr = (fraction_upper_term == 0.) & (fraction_lower_term == 0.)
+        fraction_term[where_zero_over_zero_arr] = 1.
 
     return fraction_term
 

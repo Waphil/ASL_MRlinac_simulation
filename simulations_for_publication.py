@@ -16,6 +16,8 @@ def main():
     figsize = (4.416, 3.4)
     labels_fontsize = 11 #None #12
     fwhm_line_height = 30.
+    is_show_sinc_on_psf = True # Decide if we show the ideal sinc on the PSF
+    is_show_sinc_on_fwhm = True # Decide if we show the FWHM of the ideal sinc on the FWHM plot
 
     # Hardware / constants
     b0       = 0.35                   # [T]
@@ -55,7 +57,6 @@ def main():
     tr_arr      = np.linspace(5.6, 8.3, num=55, endpoint=True).reshape((1, 1, -1, 1, 1)) #5:0.2:7      # [ms]
     ti_arr      = np.linspace(1100., 1500., num=81, endpoint=True).reshape((1, 1, 1, -1, 1)) #1100:20:1400 # [ms]
     td_arr      = np.linspace(0., 400., num=21, endpoint=True).reshape((1, 1, 1, 1, -1)) #0:100:400    # [ms]
-    #n_avg_arr   = np.linspace(60., 110., num=6, endpoint=True).reshape((1, 1, 1, 1, 1, -1)) #60:10:110
 
     # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
     tm_arr = ti_arr + (n + n_dummy_tr) * tr_arr + td_arr
@@ -128,8 +129,20 @@ def main():
     legend_title = f"$\\alpha$ = {fa}°,\n$TR$ $\\left[ms\\right]$"
     legend_kwargs = dict(loc='upper right', fancybox=True, shadow=False, framealpha=1.)
     colors = ["#0072BD","#D95319","#EDB120","#7E2F8E","#77AC30","#4DBEEE","#A2142F"]
+    linestyles = ["-", "-", "-", "-", "-", "-", "-"]
+    if is_show_sinc_on_psf:
+        psf_sinc = np.sinc(z).reshape((1, -1))
+        overall_psf_max = np.amax(psf)
+        psf_sinc_normalized = psf_sinc / np.amax(psf_sinc) * overall_psf_max
+        psf = np.append(psf, psf_sinc_normalized, axis=0)
+        y_lim[0] = min(y_lim[0], 1.1*np.amin(psf_sinc_normalized))
+        label_list += ["Ideal\nSinc"]
+        colors = colors[:(len(label_list)-1)]
+        colors += ["darkgray"]
+        linestyles = linestyles[:(len(label_list)-1)]
+        linestyles += ["--"]
     ax = basic_multiline_plot(z, psf, label_list,
-                         ax=None, figsize=figsize, colors=colors, linestyles=None, alphas=None,
+                         ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
                          title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                          is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
                          x_tick_minor_spacing=None, y_tick_minor_spacing=None,
@@ -166,8 +179,20 @@ def main():
     legend_title = f"$TR$ = {tr} ms,\n$\\alpha$ $\\left[°\\right]$"
     legend_kwargs = dict(loc='upper right', fancybox=True, shadow=False, framealpha=1.)
     colors = ["#0072BD","#D95319","#EDB120","#7E2F8E","#77AC30","#4DBEEE","#A2142F"]
+    linestyles = ["-", "-", "-", "-", "-", "-", "-"]
+    if is_show_sinc_on_psf:
+        psf_sinc = np.sinc(z).reshape((1, -1))
+        overall_psf_max = np.amax(psf)
+        psf_sinc_normalized = psf_sinc / np.amax(psf_sinc) * overall_psf_max
+        psf = np.append(psf, psf_sinc_normalized, axis=0)
+        y_lim[0] = min(y_lim[0], 1.1*np.amin(psf_sinc_normalized))
+        label_list += ["Ideal\nSinc"]
+        colors = colors[:(len(label_list)-1)]
+        colors += ["darkgray"]
+        linestyles = linestyles[:(len(label_list)-1)]
+        linestyles += ["--"]
     ax = basic_multiline_plot(z, psf, label_list,
-                         ax=None, figsize=figsize, colors=colors, linestyles=None, alphas=None,
+                         ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
                          title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                          is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
                          x_tick_minor_spacing=None, y_tick_minor_spacing=None,
@@ -461,8 +486,18 @@ def main():
     legend_title = f"$TR$ $\\left[ms\\right]$"
     legend_kwargs = dict(loc='upper left', fancybox=True, shadow=False, framealpha=1.)
     colors = ["#0072BD","#D95319","#EDB120","#7E2F8E"]
+    linestyles = ["-", "-", "-", "-"]
+    if is_show_sinc_on_fwhm:
+        psf_sinc = np.sinc(z)
+        ideal_sinc_fwhm = calculate_fwhm(z, psf_sinc)[0][0]*np.ones((1, np.size(fa_arr)))
+        fwhm_arr = np.append(fwhm_arr, ideal_sinc_fwhm, axis=0)
+        label_list += ["Ideal Sinc"]
+        colors = colors[:(len(label_list)-1)]
+        colors += ["darkgray"]
+        linestyles = linestyles[:(len(label_list)-1)]
+        linestyles += ["--"]
     ax = basic_multiline_plot(fa_arr.ravel(), fwhm_arr, label_list,
-                         ax=None, figsize=figsize, colors=colors, linestyles=None, alphas=None,
+                         ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
                          title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                          is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
                          x_tick_minor_spacing=None, y_tick_minor_spacing=None,
