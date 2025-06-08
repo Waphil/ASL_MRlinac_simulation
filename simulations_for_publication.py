@@ -14,7 +14,7 @@ from matplotlib.lines import Line2D
 def main():
     # Plot parameters
     figsize = (4.416, 3.4)
-    labels_fontsize = 11 #None #12
+    labels_fontsize = 11
     fwhm_line_height = 30.
     is_show_sinc_on_psf = True # Decide if we show the ideal sinc on the PSF
     is_show_sinc_on_fwhm = True # Decide if we show the FWHM of the ideal sinc on the FWHM plot
@@ -24,7 +24,9 @@ def main():
     bw_px_min = 130                   # [Hz/px] (minimum bandwidth per pixel)
     t_grad   = 3.43 #2.7              # [ms]    (dead time within TR for gradients/RF pulses)
     tr_max_bw  = 1e3/bw_px_min+t_grad # [ms]    (maximum TR to assure high enough BW)
-    delta_f_max = 40                  # [Hz]    (maximum off-resonance in the brain)
+    delta_f_max = 40.                 # [Hz]    (maximum off-resonance in the brain at 0.35 T)
+    if b0 > 0.35:
+        delta_f_max = 66.#140?        # [Hz]    (maximum off-resonance in the brain at 3 T(?) Simply chose value that allows reasonable TR)
     tr_max_offres = 1e3/(3*delta_f_max) # [ms]    (maximum TR avoiding artefacts, Bieri et al.)
     tr_max    = min(tr_max_bw, tr_max_offres)
 
@@ -53,10 +55,15 @@ def main():
     ##################################################
 
     # Parameters
-    fa_arr      = np.linspace(80., 130., num=41, endpoint=True).reshape((1, -1, 1, 1, 1)) #90:5:130     # [°]
-    tr_arr      = np.linspace(5.6, 8.3, num=55, endpoint=True).reshape((1, 1, -1, 1, 1)) #5:0.2:7      # [ms]
-    ti_arr      = np.linspace(1100., 1500., num=81, endpoint=True).reshape((1, 1, 1, -1, 1)) #1100:20:1400 # [ms]
-    td_arr      = np.linspace(0., 400., num=21, endpoint=True).reshape((1, 1, 1, 1, -1)) #0:100:400    # [ms]
+    fa_arr      = np.linspace(50., 150., num=101, endpoint=True).reshape((1, -1, 1, 1, 1)) #90:5:130     # [°]
+    tr_arr      = np.linspace(4.5, 8.3, num=77, endpoint=True).reshape((1, 1, -1, 1, 1)) #5:0.2:7      # [ms]
+    ti_arr      = np.linspace(900., 1500., num=121, endpoint=True).reshape((1, 1, 1, -1, 1)) #1100:20:1400 # [ms]
+    td_arr      = np.linspace(0., 800., num=81, endpoint=True).reshape((1, 1, 1, 1, -1)) #0:100:400    # [ms]
+
+    # Make sure to only simulate tr below the maximum allowed
+    tr_arr = tr_arr[tr_arr <= tr_max].reshape((1, 1, -1, 1, 1))
+    if np.size(tr_arr) == 0:
+        raise ValueError("The chosen configuration has no valid TRs, as the minimum simulated is above maximum allowed.")
 
     # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
     tm_arr = ti_arr + (n + n_dummy_tr) * tr_arr + td_arr
@@ -83,32 +90,39 @@ def main():
     snr_arr = psf_max * np.sqrt(n_avg_arr[0] * t_readout_arr[0])  # Have to remove first dimension of avg and readout to match them
     snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)
 
-    #best_settings_index = np.argmax(snr_finitetm_corr_arr) # hmm, doesn't work
     best_settings_indices_masks = [
         np.count_nonzero(snr_finitetm_corr_arr == np.amax(snr_finitetm_corr_arr),
                          axis=tuple([j for j in range(snr_finitetm_corr_arr.ndim) if j != i]))
         for i in range(snr_finitetm_corr_arr.ndim)]
     best_settings_indices = [np.argmax(best_settings) for best_settings in best_settings_indices_masks]
 
+    fa_optimum = fa_arr.ravel()[best_settings_indices[0]]
+    tr_optimum = tr_arr.ravel()[best_settings_indices[1]]
+    ti_optimum = ti_arr.ravel()[best_settings_indices[2]]
+    td_optimum = td_arr.ravel()[best_settings_indices[3]]
+    tm_optimum = tm_arr[0,0][*best_settings_indices[1:]]
+    n_avg_optimum = n_avg_arr[0,0][*best_settings_indices[1:]]
+
     print(f"-----------------------\n"
           f"Optimized settings:\n"
-          f"FA = {fa_arr.ravel()[best_settings_indices[0]]}°\n"
-          f"TR = {tr_arr.ravel()[best_settings_indices[1]]}ms\n"
-          f"TI = {ti_arr.ravel()[best_settings_indices[2]]}ms\n"
-          f"TD = {td_arr.ravel()[best_settings_indices[3]]}ms\n"
-          f"TM = {tm_arr[0,0][*best_settings_indices[1:]]}ms\n"
-          f"N_avg = {n_avg_arr[0,0][*best_settings_indices[1:]]}\n")
+          f"FA = {fa_optimum}°\n"
+          f"TR = {tr_optimum} ms\n"
+          f"TI = {ti_optimum} ms\n"
+          f"TD = {td_optimum} ms\n"
+          f"TM = {tm_optimum} ms\n"
+          f"N_avg = {n_avg_optimum}\n")
     print(f"The TM correction factor for those settings is "
           f"{correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)[0][*best_settings_indices[1:]]}")
 
-    ###########################
-    # Experiment: Variable TR #
-    ###########################
+    ########################################
+    # Experiment: show PSF for Variable TR #
+    ########################################
 
-    fa       = 95. #110 # TODO: check if this is really a good idea
+    fa       = fa_optimum #95.
     n_dummy_tr  = 8
     tr_arr   = np.linspace(5., 8., num=4, endpoint=True).reshape((1, -1))
-    ti       = 1345. #900
+    ti       = ti_optimum #1345.
+    td       = td_optimum #0.
 
     # Calculating PSFs
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr_arr, ti, t1a, t2a, inv_eff, perf, partition_coef,
@@ -153,14 +167,15 @@ def main():
         y_coords = np.array([psf_individual[fwhm_tuple[1]], psf_individual[fwhm_tuple[2]]])
         ax.errorbar(x_coords, y_coords, yerr=fwhm_line_height, ecolor=color, fmt="", linestyle="")
 
-    ###########################
-    # Experiment: Variable FA #
-    ###########################
+    ########################################
+    # Experiment: show PSF for Variable FA #
+    ########################################
 
     fa_arr = np.linspace(70, 130, num=4, endpoint=True).reshape((1, -1))
-    n_dummy_tr_arr = 8. #np.around(fa_arr*0.05) # TODO: check this heuristic formula
-    tr       = 7.65 #6.6
-    ti       = 1345 #900
+    n_dummy_tr_arr = 8.
+    tr       = tr_optimum #7.65
+    ti       = ti_optimum #1345.
+    td       = td_optimum #0.
 
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr, ti, t1a, t2a, inv_eff, perf, partition_coef,
                                                        delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr_arr, n_tr=n,
@@ -208,10 +223,10 @@ def main():
     #######################################
 
     # Parameters
-    fa   = 95. #90
-    tr_arr = np.linspace(4.5, 9.2, num=236, endpoint=True).reshape((1, -1, 1)) # 4:0.01:9.2
-    ti   = 1345. #1300
-    td   = 0.
+    fa   = fa_optimum #95.
+    tr_arr = np.linspace(4.5, 8.3, num=236, endpoint=True).reshape((1, -1, 1)) # 4:0.01:9.2
+    ti   = ti_optimum #1345.
+    td   = td_optimum #0.
     t_total = 100.*6*60*1000. # Do this to avoid discrete N_average phenomenons on the curve's appearance.
 
     # Calculate the array corresponding to readout time (tr - t_grad), which is the inverse of the pixelBW
@@ -228,6 +243,7 @@ def main():
 
     # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
     tm_arr = ti + (n + n_dummy_tr) * tr_arr + td
+    #tm_arr = np.maximum(tm_arr, np.amax(tm_arr)) # Experiment: show same TM for all images (the max)
 
     # Calculate maximum number of averages (each average is 1 tag & 1 control image) without exceeding total acq. time
     n_avg_arr = np.floor(t_total / (2*tm_arr) - n_dummy_tm)
@@ -252,9 +268,6 @@ def main():
     snr_norm_for_plot_arr = snr_norm_arr.T
     snr_finitetm_corr_arr_norm_for_plot_arr = snr_finitetm_corr_norm_arr.T
 
-    # Find the lowest value that gets SNR to 95%
-    first_tr_with_high_snr = tr_arr.ravel()[np.nonzero(snr_norm_for_plot_arr[4] > 0.95)[0][0]]
-
     # Plot
 
     grid_kwargs = dict(which="major", axis="both")
@@ -274,8 +287,6 @@ def main():
                               x_tick_minor_spacing=None, y_tick_minor_spacing=None,
                               x_scale=None, y_scale=None, x_lim=x_lim, y_lim=y_lim, labels_fontsize=labels_fontsize,
                               legend_title=legend_title, legend_kwargs=legend_kwargs, is_show=False)
-    #ax.axhline(0.95, color="gray", linestyle=":", linewidth=1)
-    #ax.axvline(first_tr_with_high_snr, color="gray", linestyle=":", linewidth=1)
 
     # Define custom legend for aesthetic reasons
     legend_handles = [
@@ -293,8 +304,9 @@ def main():
 
     # Parameters
     fa_arr   = np.linspace(45., 155., num=111, endpoint=True).reshape((1, -1, 1)) # 45:1:155
-    tr = 7.65 #6.
-    ti   = 1345. #1300
+    tr = tr_optimum #7.65
+    ti   = ti_optimum #1345.
+    td = td_optimum #0.
     t_grad = 3.43 #2.7
 
     # Calculate the array corresponding to readout time (tr - t_grad), which is the inverse of the pixelBW
@@ -335,9 +347,6 @@ def main():
     snr_norm_for_plot_arr = snr_norm_arr.T
     snr_finitetm_corr_arr_norm_for_plot_arr = snr_finitetm_corr_norm_arr.T
 
-    # Find the lowest value that gets SNR to 95%
-    first_fa_with_high_snr = fa_arr.ravel()[np.nonzero(snr_norm_for_plot_arr[4] > 0.95)[0][0]]
-
     # Plot
 
     grid_kwargs = dict(which="major", axis="both")
@@ -357,8 +366,6 @@ def main():
                               x_tick_minor_spacing=None, y_tick_minor_spacing=None,
                               x_scale=None, y_scale=None, x_lim=x_lim, y_lim=y_lim, labels_fontsize=labels_fontsize,
                               legend_title=legend_title, legend_kwargs=legend_kwargs, is_show=False)
-    #ax.axhline(0.95, color="gray", linestyle=":", linewidth=1)
-    #ax.axvline(first_fa_with_high_snr, color="gray", linestyle=":", linewidth=1)
 
     # Define custom legend for aesthetic reasons
     legend_handles = [
@@ -371,14 +378,14 @@ def main():
     ax.legend(handles=legend_handles, framealpha=1.)
 
     #######################################
-    # Experiment: PSF SNR for variable TR #
+    # Experiment: PSF SNR for variable TI #
     #######################################
 
     # Parameters
-    fa = 95.  # 90
-    tr = 7.65
-    ti_arr = np.linspace(1100., 1500., num=401, endpoint=True).reshape((1, -1, 1)) #1100:20:1400 # [ms]
-    td = 0.
+    fa = fa_optimum #95.
+    tr = tr_optimum #7.65
+    ti_arr = np.linspace(900., 1500., num=601, endpoint=True).reshape((1, -1, 1)) #1100:20:1400 # [ms]
+    td = td_optimum #0.
     t_total = 100.*6*60*1000. # Do this to avoid discrete N_average phenomenons on the curve's appearance.
 
     # Calculate the array corresponding to readout time (tr - t_grad), which is the inverse of the pixelBW
@@ -395,6 +402,7 @@ def main():
 
     # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
     tm_arr = ti_arr + (n + n_dummy_tr) * tr + td
+    #tm_arr = np.maximum(tm_arr, np.amax(tm_arr)) # Experiment: show same TM for all images (the max)
 
     # Calculate maximum number of averages (each average is 1 tag & 1 control image) without exceeding total acq. time
     n_avg_arr = np.floor(t_total / (2 * tm_arr) - n_dummy_tm)
@@ -419,9 +427,6 @@ def main():
     snr_norm_for_plot_arr = snr_norm_arr.T
     snr_finitetm_corr_arr_norm_for_plot_arr = snr_finitetm_corr_norm_arr.T
 
-    # Find the lowest value that gets SNR to 95%
-    first_tr_with_high_snr = tr_arr.ravel()[np.nonzero(snr_norm_for_plot_arr[4] > 0.95)[0][0]]
-
     # Plot
 
     grid_kwargs = dict(which="major", axis="both")
@@ -443,8 +448,88 @@ def main():
                               x_tick_minor_spacing=None, y_tick_minor_spacing=None,
                               x_scale=None, y_scale=None, x_lim=x_lim, y_lim=y_lim, labels_fontsize=labels_fontsize,
                               legend_title=legend_title, legend_kwargs=legend_kwargs, is_show=False)
-    # ax.axhline(0.95, color="gray", linestyle=":", linewidth=1)
-    # ax.axvline(first_tr_with_high_snr, color="gray", linestyle=":", linewidth=1)
+
+    # Define custom legend for aesthetic reasons
+    legend_handles = [
+        Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
+        Line2D([0], [0], color="#77AC30", marker=None, linestyle="--",
+               label=f"vary $T_1$ by ±{vary_factor:.0%}"),
+        Line2D([0], [0], color="#D95319", marker=None, linestyle="--",
+               label=f"vary $T_2$ by ±{vary_factor:.0%}"),
+    ]
+    ax.legend(handles=legend_handles, framealpha=1.)
+
+    #######################################
+    # Experiment: PSF SNR for variable TM #
+    #######################################
+
+    # Parameters
+    fa = fa_optimum #95.
+    tr = tr_optimum #7.65
+    ti = ti_optimum #1345.
+    td_arr = np.linspace(0., 800., num=801, endpoint=True).reshape((1, -1, 1))
+    t_total = 100.*6*60*1000. # Do this to avoid discrete N_average phenomenons on the curve's appearance.
+
+    # Calculate the array corresponding to readout time (tr - t_grad), which is the inverse of the pixelBW
+    t_readout = (tr - t_grad)
+
+    # Relaxation Parameter Variability
+    vary_factor = 0.1
+    t1a_arr = (1 + vary_factor * np.array([-1, 0, 1])) * t1a
+    t2a_arr = (1 + vary_factor * np.array([-1, 0, 1])) * t2a
+
+    total_t1a_arr, total_t2a_arr = np.meshgrid(t1a_arr, t2a_arr)
+    total_t1a_arr = np.reshape(total_t1a_arr, (1, 1, -1))
+    total_t2a_arr = np.reshape(total_t2a_arr, (1, 1, -1))
+
+    # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
+    tm_arr = ti + (n + n_dummy_tr) * tr + td_arr
+    #tm_arr = np.maximum(tm_arr, np.amax(tm_arr)) # Experiment: show same TM for all images (the max)
+
+    # Calculate maximum number of averages (each average is 1 tag & 1 control image) without exceeding total acq. time
+    n_avg_arr = np.floor(t_total / (2 * tm_arr) - n_dummy_tm)
+
+    # Calculating PSFs
+    # few points to make it computationally manageable. We only care about center here anyway.
+    psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, total_t1a_arr, total_t2a_arr,
+                                                       inv_eff, perf, partition_coef,
+                                                       delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
+                                                       n_points_psf=3)
+    z = z[:, 0]
+    psf_max_arr = np.amax(psf, axis=0)  # Center of PSF is the max value in each case
+
+    snr_arr = psf_max_arr * np.sqrt(n_avg_arr.reshape((-1, 1)) * t_readout)
+
+    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], total_t1a_arr[0], inv_eff)
+
+    # Normalize SNR
+    snr_norm_arr = snr_arr / np.amax(snr_arr, axis=0)
+    snr_finitetm_corr_norm_arr = snr_finitetm_corr_arr / np.amax(snr_finitetm_corr_arr, axis=0)
+
+    snr_norm_for_plot_arr = snr_norm_arr.T
+    snr_finitetm_corr_arr_norm_for_plot_arr = snr_finitetm_corr_norm_arr.T
+
+    # Plot
+
+    grid_kwargs = dict(which="major", axis="both")
+    x_label = r"$TM$ $\left[ms\right]$"
+    y_label = r"$SNR_{rel}$"
+    x_lim = [np.amin(tm_arr), np.amax(tm_arr)]
+    y_lim = None
+    label_list = ["" for i in snr_finitetm_corr_arr_norm_for_plot_arr]
+    legend_title = "Scenario"
+    legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
+    colors = [None, "#D95319", None, "#77AC30", "#0072BD", "#77AC30", None, "#D95319", None]
+    linestyles = ["", ":", "", ":", "-", ":", "", ":", ""]
+    ax = basic_multiline_plot(tm_arr.ravel(), snr_finitetm_corr_arr_norm_for_plot_arr, label_list,
+                              # snr_norm_for_plot_arr
+                              ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
+                              title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs,
+                              ticklabel_kwargs=None,
+                              is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
+                              x_tick_minor_spacing=None, y_tick_minor_spacing=None,
+                              x_scale=None, y_scale=None, x_lim=x_lim, y_lim=y_lim, labels_fontsize=labels_fontsize,
+                              legend_title=legend_title, legend_kwargs=legend_kwargs, is_show=False)
 
     # Define custom legend for aesthetic reasons
     legend_handles = [
