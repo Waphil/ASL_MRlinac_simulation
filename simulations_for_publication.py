@@ -14,10 +14,13 @@ from matplotlib.lines import Line2D
 def main():
     # Plot parameters
     figsize = (4.416, 3.4)
+    figsize_psf = (3.3, 3.4)#(2.93, 3.4)
     labels_fontsize = 11
     fwhm_line_height = 30.
     is_show_sinc_on_psf = True # Decide if we show the ideal sinc on the PSF
     is_show_sinc_on_fwhm = True # Decide if we show the FWHM of the ideal sinc on the FWHM plot
+    is_show_snr_eff = True # Decide if we show SNR efficiency (True) or absolute SNR (False)
+    is_show_snr_with_const_tm = True # Decide if we want to show the effSNR for constant TM in TI and TR plots
 
     # Hardware / constants
     b0       = 0.35                   # [T]
@@ -69,7 +72,7 @@ def main():
     tm_arr = ti_arr + (n + n_dummy_tr) * tr_arr + td_arr
 
     # Calculate maximum number of averages (each average is 1 tag & 1 control image) without exceeding total acq. time
-    n_avg_arr = np.floor(t_total / (2*tm_arr) - n_dummy_tm)
+    #n_avg_arr = np.floor(t_total / (2*tm_arr) - n_dummy_tm)
 
     # Calculate the array corresponding to readout time (tr - t_grad), which is the inverse of the pixelBW
     t_readout_arr = (tr_arr-t_grad)
@@ -87,13 +90,14 @@ def main():
                                                         n_dummy_tr=n_dummy_tr)
         psf_max = psf_max[0]
 
-    snr_arr = psf_max * np.sqrt(n_avg_arr[0] * t_readout_arr[0])  # Have to remove first dimension of avg and readout to match them
+    snr_arr = psf_max * np.sqrt(t_readout_arr[0])  # Have to remove first dimension readout to match them
     snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)
+    snr_eff_finitetm_corr_arr = snr_finitetm_corr_arr / np.sqrt(tm_arr[0])
 
     best_settings_indices_masks = [
-        np.count_nonzero(snr_finitetm_corr_arr == np.amax(snr_finitetm_corr_arr),
-                         axis=tuple([j for j in range(snr_finitetm_corr_arr.ndim) if j != i]))
-        for i in range(snr_finitetm_corr_arr.ndim)]
+        np.count_nonzero(snr_eff_finitetm_corr_arr == np.amax(snr_eff_finitetm_corr_arr),
+                         axis=tuple([j for j in range(snr_eff_finitetm_corr_arr.ndim) if j != i]))
+        for i in range(snr_eff_finitetm_corr_arr.ndim)]
     best_settings_indices = [np.argmax(best_settings) for best_settings in best_settings_indices_masks]
 
     fa_optimum = fa_arr.ravel()[best_settings_indices[0]]
@@ -101,18 +105,18 @@ def main():
     ti_optimum = ti_arr.ravel()[best_settings_indices[2]]
     td_optimum = td_arr.ravel()[best_settings_indices[3]]
     tm_optimum = tm_arr[0,0][*best_settings_indices[1:]]
-    n_avg_optimum = n_avg_arr[0,0][*best_settings_indices[1:]]
+    n_avg_optimum = np.floor(t_total / (2*tm_optimum) - n_dummy_tm)
 
     print(f"-----------------------\n"
           f"Optimized settings:\n"
           f"FA = {fa_optimum}°\n"
-          f"TR = {tr_optimum} ms\n"
+          f"TR = {tr_optimum:.2f} ms\n"
           f"TI = {ti_optimum} ms\n"
           f"TD = {td_optimum} ms\n"
           f"TM = {tm_optimum} ms\n"
           f"N_avg = {n_avg_optimum}\n")
     print(f"The TM correction factor for those settings is "
-          f"{correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)[0][*best_settings_indices[1:]]}")
+          f"{correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)[0][*best_settings_indices[1:]]:.4f}")
 
     ########################################
     # Experiment: show PSF for Variable TR #
@@ -156,7 +160,7 @@ def main():
         linestyles = linestyles[:(len(label_list)-1)]
         linestyles += ["--"]
     ax = basic_multiline_plot(z, psf, label_list,
-                         ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
+                         ax=None, figsize=figsize_psf, colors=colors, linestyles=linestyles, alphas=None,
                          title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                          is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
                          x_tick_minor_spacing=None, y_tick_minor_spacing=None,
@@ -191,7 +195,7 @@ def main():
     x_lim = [-3.5, 3.5]
     y_lim = [-10., 115.]
     label_list = [f"{fa}" for fa in fa_arr.ravel()]
-    legend_title = f"$TR$ = {tr} ms,\n$\\alpha$ $\\left[°\\right]$"
+    legend_title = f"$TR$ = {tr:.1f} ms,\n$\\alpha$ $\\left[°\\right]$"
     legend_kwargs = dict(loc='upper right', fancybox=True, shadow=False, framealpha=1.)
     colors = ["#0072BD","#D95319","#EDB120","#7E2F8E","#77AC30","#4DBEEE","#A2142F"]
     linestyles = ["-", "-", "-", "-", "-", "-", "-"]
@@ -207,7 +211,7 @@ def main():
         linestyles = linestyles[:(len(label_list)-1)]
         linestyles += ["--"]
     ax = basic_multiline_plot(z, psf, label_list,
-                         ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
+                         ax=None, figsize=figsize_psf, colors=colors, linestyles=linestyles, alphas=None,
                          title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                          is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
                          x_tick_minor_spacing=None, y_tick_minor_spacing=None,
@@ -227,7 +231,6 @@ def main():
     tr_arr = np.linspace(4.5, 8.3, num=236, endpoint=True).reshape((1, -1, 1)) # 4:0.01:9.2
     ti   = ti_optimum #1345.
     td   = td_optimum #0.
-    t_total = 100.*6*60*1000. # Do this to avoid discrete N_average phenomenons on the curve's appearance.
 
     # Calculate the array corresponding to readout time (tr - t_grad), which is the inverse of the pixelBW
     t_readout_arr = (tr_arr-t_grad)
@@ -245,9 +248,6 @@ def main():
     tm_arr = ti + (n + n_dummy_tr) * tr_arr + td
     #tm_arr = np.maximum(tm_arr, np.amax(tm_arr)) # Experiment: show same TM for all images (the max)
 
-    # Calculate maximum number of averages (each average is 1 tag & 1 control image) without exceeding total acq. time
-    n_avg_arr = np.floor(t_total / (2*tm_arr) - n_dummy_tm)
-
     # Calculating PSFs
     # few points to make it computationally manageable. We only care about center here anyway.
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr_arr, ti, total_t1a_arr, total_t2a_arr,
@@ -257,30 +257,41 @@ def main():
     z = z[:, 0]
     psf_max_arr = np.amax(psf, axis=0) # Center of PSF is the max value in each case
 
-    snr_arr = psf_max_arr * np.sqrt(n_avg_arr.reshape((-1, 1)) * t_readout_arr.reshape((-1, 1)))
-
-    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)
+    snr_arr = psf_max_arr * np.sqrt(t_readout_arr.reshape((-1, 1))) # assumes constant TM
+    #snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)
+    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], total_t1a_arr[0], inv_eff)
+    snr_eff_finitetm_corr_arr = snr_finitetm_corr_arr / np.sqrt(tm_arr[0])
 
     # Normalize SNR
     snr_norm_arr = snr_arr/np.amax(snr_arr, axis=0)
     snr_finitetm_corr_norm_arr = snr_finitetm_corr_arr/np.amax(snr_finitetm_corr_arr, axis=0)
+    snr_eff_finitetm_corr_norm_arr = snr_eff_finitetm_corr_arr/np.amax(snr_eff_finitetm_corr_arr, axis=0)
 
     snr_norm_for_plot_arr = snr_norm_arr.T
-    snr_finitetm_corr_arr_norm_for_plot_arr = snr_finitetm_corr_norm_arr.T
+    if is_show_snr_eff:
+        snr_plot_arr = snr_eff_finitetm_corr_norm_arr.T
+    else:
+        snr_plot_arr = snr_finitetm_corr_norm_arr.T
 
     # Plot
 
     grid_kwargs = dict(which="major", axis="both")
     x_label = r"$TR$ $\left[ms\right]$"
-    y_label = r"$SNR_{rel}$"
+    y_label = r"relative $effSNR_{PSF}$" if is_show_snr_eff else r"relative $SNR_{PSF}$"
     x_lim = [np.amin(tr_arr), np.amax(tr_arr)]
     y_lim = None
-    label_list = ["" for i in snr_norm_for_plot_arr]
+    label_list = ["" for i in snr_plot_arr]
     legend_title = "Scenario"
     legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
     colors = [None, "#D95319", None, "#77AC30", "#0072BD", "#77AC30", None, "#D95319", None]
     linestyles = ["", ":", "", ":", "-", ":", "", ":", ""]
-    ax = basic_multiline_plot(tr_arr.ravel(), snr_finitetm_corr_arr_norm_for_plot_arr, label_list, #snr_norm_for_plot_arr
+    if is_show_snr_with_const_tm:
+        # Add normalized SNR with constant TM if desired
+        snr_plot_arr = np.append(snr_plot_arr, snr_norm_for_plot_arr[[4]], axis=0)
+        label_list += [""]
+        colors += ["#30A2ED"]
+        linestyles += ["--"]
+    ax = basic_multiline_plot(tr_arr.ravel(), snr_plot_arr, label_list,
                               ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
                               title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                               is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
@@ -291,11 +302,14 @@ def main():
     # Define custom legend for aesthetic reasons
     legend_handles = [
         Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
-        Line2D([0], [0], color="#77AC30", marker=None, linestyle="--",
+        Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
                label=f"vary $T_1$ by ±{vary_factor:.0%}"),
-        Line2D([0], [0], color="#D95319", marker=None, linestyle="--",
+        Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
                label=f"vary $T_2$ by ±{vary_factor:.0%}"),
     ]
+    if is_show_snr_with_const_tm:
+        legend_handles.append(Line2D([0], [0], color="#30A2ED", marker=None, linestyle="--",
+                                     label="baseline (constant TM)"))
     ax.legend(handles=legend_handles, framealpha=1.)
 
     #######################################
@@ -324,9 +338,6 @@ def main():
     # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
     tm = ti + (n + n_dummy_tr) * tr + td
 
-    # Calculate maximum number of averages (each average is 1 tag & 1 control image) without exceeding total acq. time
-    n_avg = np.floor(t_total / (2*tm) - n_dummy_tm)
-
     # Calculating PSFs
     # few points to make it computationally manageable. We only care about center here anyway.
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr, ti, total_t1a_arr, total_t2a_arr,
@@ -336,30 +347,35 @@ def main():
     z = z[:, 0]
     psf_max_arr = np.amax(psf, axis=0) # Center of PSF is the max value in each case
 
-    snr_arr = psf_max_arr * np.sqrt(n_avg * t_readout) # Meaningless here, but do it for completeness
-
-    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm, t1a, inv_eff) # Meaningless here, but do it for completeness
+    snr_arr = psf_max_arr * np.sqrt(t_readout) # Meaningless here, but do it for completeness
+    #snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm, t1a, inv_eff) # Meaningless here, but do it for completeness
+    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm, total_t1a_arr[0], inv_eff)
+    snr_eff_finitetm_corr_arr = snr_finitetm_corr_arr / np.sqrt(tm)
 
     # Normalize SNR
     snr_norm_arr = snr_arr/np.amax(snr_arr, axis=0)
     snr_finitetm_corr_norm_arr = snr_finitetm_corr_arr/np.amax(snr_finitetm_corr_arr, axis=0)
+    snr_eff_finitetm_corr_norm_arr = snr_eff_finitetm_corr_arr/np.amax(snr_eff_finitetm_corr_arr, axis=0)
 
     snr_norm_for_plot_arr = snr_norm_arr.T
-    snr_finitetm_corr_arr_norm_for_plot_arr = snr_finitetm_corr_norm_arr.T
+    if is_show_snr_eff:
+        snr_plot_arr = snr_eff_finitetm_corr_norm_arr.T
+    else:
+        snr_plot_arr = snr_finitetm_corr_norm_arr.T
 
     # Plot
 
     grid_kwargs = dict(which="major", axis="both")
     x_label = r"$\alpha$ $\left[°\right]$"
-    y_label = r"$SNR_{rel}$"
+    y_label = r"relative $effSNR_{PSF}$" if is_show_snr_eff else r"relative $SNR_{PSF}$"
     x_lim = [np.amin(fa_arr), np.amax(fa_arr)]
     y_lim = None
-    label_list = ["" for i in snr_finitetm_corr_arr_norm_for_plot_arr]
+    label_list = ["" for i in snr_plot_arr]
     legend_title = "Scenario"
     legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
     colors = [None, "#D95319", None, "#77AC30", "#0072BD", "#77AC30", None, "#D95319", None]
     linestyles = ["", ":", "", ":", "-", ":", "", ":", ""]
-    ax = basic_multiline_plot(fa_arr.ravel(), snr_finitetm_corr_arr_norm_for_plot_arr, label_list, #snr_norm_for_plot_arr
+    ax = basic_multiline_plot(fa_arr.ravel(), snr_plot_arr, label_list, #snr_norm_for_plot_arr
                               ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
                               title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                               is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
@@ -370,9 +386,9 @@ def main():
     # Define custom legend for aesthetic reasons
     legend_handles = [
         Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
-        Line2D([0], [0], color="#77AC30", marker=None, linestyle="--",
+        Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
                label=f"vary $T_1$ by ±{vary_factor:.0%}"),
-        Line2D([0], [0], color="#D95319", marker=None, linestyle="--",
+        Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
                label=f"vary $T_2$ by ±{vary_factor:.0%}"),
     ]
     ax.legend(handles=legend_handles, framealpha=1.)
@@ -386,7 +402,6 @@ def main():
     tr = tr_optimum #7.65
     ti_arr = np.linspace(900., 1500., num=601, endpoint=True).reshape((1, -1, 1)) #1100:20:1400 # [ms]
     td = td_optimum #0.
-    t_total = 100.*6*60*1000. # Do this to avoid discrete N_average phenomenons on the curve's appearance.
 
     # Calculate the array corresponding to readout time (tr - t_grad), which is the inverse of the pixelBW
     t_readout = (tr - t_grad)
@@ -404,9 +419,6 @@ def main():
     tm_arr = ti_arr + (n + n_dummy_tr) * tr + td
     #tm_arr = np.maximum(tm_arr, np.amax(tm_arr)) # Experiment: show same TM for all images (the max)
 
-    # Calculate maximum number of averages (each average is 1 tag & 1 control image) without exceeding total acq. time
-    n_avg_arr = np.floor(t_total / (2 * tm_arr) - n_dummy_tm)
-
     # Calculating PSFs
     # few points to make it computationally manageable. We only care about center here anyway.
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti_arr, total_t1a_arr, total_t2a_arr,
@@ -416,30 +428,41 @@ def main():
     z = z[:, 0]
     psf_max_arr = np.amax(psf, axis=0)  # Center of PSF is the max value in each case
 
-    snr_arr = psf_max_arr * np.sqrt(n_avg_arr.reshape((-1, 1)) * t_readout)
-
-    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)
+    snr_arr = psf_max_arr * np.sqrt(t_readout)
+    #snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)
+    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], total_t1a_arr[0], inv_eff)
+    snr_eff_finitetm_corr_arr = snr_finitetm_corr_arr / np.sqrt(tm_arr[0])
 
     # Normalize SNR
     snr_norm_arr = snr_arr / np.amax(snr_arr, axis=0)
     snr_finitetm_corr_norm_arr = snr_finitetm_corr_arr / np.amax(snr_finitetm_corr_arr, axis=0)
+    snr_eff_finitetm_corr_norm_arr = snr_eff_finitetm_corr_arr / np.amax(snr_eff_finitetm_corr_arr, axis=0)
 
     snr_norm_for_plot_arr = snr_norm_arr.T
-    snr_finitetm_corr_arr_norm_for_plot_arr = snr_finitetm_corr_norm_arr.T
+    if is_show_snr_eff:
+        snr_plot_arr = snr_eff_finitetm_corr_norm_arr.T
+    else:
+        snr_plot_arr = snr_finitetm_corr_norm_arr.T
 
     # Plot
 
     grid_kwargs = dict(which="major", axis="both")
     x_label = r"$TI$ $\left[ms\right]$"
-    y_label = r"$SNR_{rel}$"
+    y_label = r"relative $effSNR_{PSF}$" if is_show_snr_eff else r"relative $SNR_{PSF}$"
     x_lim = [np.amin(ti_arr), np.amax(ti_arr)]
     y_lim = None
-    label_list = ["" for i in snr_finitetm_corr_arr_norm_for_plot_arr]
+    label_list = ["" for i in snr_plot_arr]
     legend_title = "Scenario"
     legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
     colors = [None, "#D95319", None, "#77AC30", "#0072BD", "#77AC30", None, "#D95319", None]
     linestyles = ["", ":", "", ":", "-", ":", "", ":", ""]
-    ax = basic_multiline_plot(ti_arr.ravel(), snr_finitetm_corr_arr_norm_for_plot_arr, label_list,
+    if is_show_snr_with_const_tm:
+        # Add normalized SNR with constant TM if desired
+        snr_plot_arr = np.append(snr_plot_arr, snr_norm_for_plot_arr[[4]], axis=0)
+        label_list += [""]
+        colors += ["#30A2ED"]
+        linestyles += ["--"]
+    ax = basic_multiline_plot(ti_arr.ravel(), snr_plot_arr, label_list,
                               # snr_norm_for_plot_arr
                               ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
                               title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs,
@@ -452,11 +475,14 @@ def main():
     # Define custom legend for aesthetic reasons
     legend_handles = [
         Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
-        Line2D([0], [0], color="#77AC30", marker=None, linestyle="--",
+        Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
                label=f"vary $T_1$ by ±{vary_factor:.0%}"),
-        Line2D([0], [0], color="#D95319", marker=None, linestyle="--",
+        Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
                label=f"vary $T_2$ by ±{vary_factor:.0%}"),
     ]
+    if is_show_snr_with_const_tm:
+        legend_handles.append(Line2D([0], [0], color="#30A2ED", marker=None, linestyle="--",
+                                     label="baseline (constant TM)"))
     ax.legend(handles=legend_handles, framealpha=1.)
 
     #######################################
@@ -468,7 +494,6 @@ def main():
     tr = tr_optimum #7.65
     ti = ti_optimum #1345.
     td_arr = np.linspace(0., 800., num=801, endpoint=True).reshape((1, -1, 1))
-    t_total = 100.*6*60*1000. # Do this to avoid discrete N_average phenomenons on the curve's appearance.
 
     # Calculate the array corresponding to readout time (tr - t_grad), which is the inverse of the pixelBW
     t_readout = (tr - t_grad)
@@ -486,9 +511,6 @@ def main():
     tm_arr = ti + (n + n_dummy_tr) * tr + td_arr
     #tm_arr = np.maximum(tm_arr, np.amax(tm_arr)) # Experiment: show same TM for all images (the max)
 
-    # Calculate maximum number of averages (each average is 1 tag & 1 control image) without exceeding total acq. time
-    n_avg_arr = np.floor(t_total / (2 * tm_arr) - n_dummy_tm)
-
     # Calculating PSFs
     # few points to make it computationally manageable. We only care about center here anyway.
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, total_t1a_arr, total_t2a_arr,
@@ -498,30 +520,34 @@ def main():
     z = z[:, 0]
     psf_max_arr = np.amax(psf, axis=0)  # Center of PSF is the max value in each case
 
-    snr_arr = psf_max_arr * np.sqrt(n_avg_arr.reshape((-1, 1)) * t_readout)
-
+    snr_arr = psf_max_arr * np.sqrt(t_readout)
     snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], total_t1a_arr[0], inv_eff)
+    snr_eff_finitetm_corr_arr = snr_finitetm_corr_arr / np.sqrt(tm_arr[0])
 
     # Normalize SNR
     snr_norm_arr = snr_arr / np.amax(snr_arr, axis=0)
     snr_finitetm_corr_norm_arr = snr_finitetm_corr_arr / np.amax(snr_finitetm_corr_arr, axis=0)
+    snr_eff_finitetm_corr_norm_arr = snr_eff_finitetm_corr_arr / np.amax(snr_eff_finitetm_corr_arr, axis=0)
 
     snr_norm_for_plot_arr = snr_norm_arr.T
-    snr_finitetm_corr_arr_norm_for_plot_arr = snr_finitetm_corr_norm_arr.T
+    if is_show_snr_eff:
+        snr_plot_arr = snr_eff_finitetm_corr_norm_arr.T
+    else:
+        snr_plot_arr = snr_finitetm_corr_norm_arr.T
 
     # Plot
 
     grid_kwargs = dict(which="major", axis="both")
     x_label = r"$TM$ $\left[ms\right]$"
-    y_label = r"$SNR_{rel}$"
+    y_label = r"relative $effSNR_{PSF}$" if is_show_snr_eff else r"relative $SNR_{PSF}$"
     x_lim = [np.amin(tm_arr), np.amax(tm_arr)]
     y_lim = None
-    label_list = ["" for i in snr_finitetm_corr_arr_norm_for_plot_arr]
+    label_list = ["" for i in snr_plot_arr]
     legend_title = "Scenario"
     legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
     colors = [None, "#D95319", None, "#77AC30", "#0072BD", "#77AC30", None, "#D95319", None]
     linestyles = ["", ":", "", ":", "-", ":", "", ":", ""]
-    ax = basic_multiline_plot(tm_arr.ravel(), snr_finitetm_corr_arr_norm_for_plot_arr, label_list,
+    ax = basic_multiline_plot(tm_arr.ravel(), snr_plot_arr, label_list,
                               # snr_norm_for_plot_arr
                               ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
                               title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs,
@@ -534,9 +560,9 @@ def main():
     # Define custom legend for aesthetic reasons
     legend_handles = [
         Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
-        Line2D([0], [0], color="#77AC30", marker=None, linestyle="--",
+        Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
                label=f"vary $T_1$ by ±{vary_factor:.0%}"),
-        Line2D([0], [0], color="#D95319", marker=None, linestyle="--",
+        Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
                label=f"vary $T_2$ by ±{vary_factor:.0%}"),
     ]
     ax.legend(handles=legend_handles, framealpha=1.)
@@ -582,7 +608,7 @@ def main():
         linestyles = linestyles[:(len(label_list)-1)]
         linestyles += ["--"]
     ax = basic_multiline_plot(fa_arr.ravel(), fwhm_arr, label_list,
-                         ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
+                         ax=None, figsize=figsize_psf, colors=colors, linestyles=linestyles, alphas=None,
                          title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                          is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
                          x_tick_minor_spacing=None, y_tick_minor_spacing=None,
