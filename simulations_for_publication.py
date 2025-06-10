@@ -2,7 +2,7 @@ import numpy as np
 from util import t1a_estimate, t2a_estimate, calculate_fwhm
 from visualize import basic_multiline_plot
 from fair_bssfp_simulation import (simulate_bssfp_psf, simulate_fair_bssfp_signal_difference_psf,
-                                   simulate_fair_bssfp_signal_difference, correction_factor_for_finite_tm)
+                                   simulate_fair_bssfp_signal_difference)
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
@@ -13,14 +13,16 @@ from matplotlib.lines import Line2D
 
 def main():
     # Plot parameters
-    figsize = (4.416, 3.4)
-    figsize_psf = (3.3, 3.4)#(2.93, 3.4)
+    figsize = (3.3, 2.6)#(2.2, 3.4)#(4.416, 3.4)
+    figsize_psf = (3.3, 3.)#(2.93, 3.4)
+    figsize_fwhm = (1.6*figsize_psf[0], figsize_psf[1])
     labels_fontsize = 11
     fwhm_line_height = 30.
     is_show_sinc_on_psf = True # Decide if we show the ideal sinc on the PSF
     is_show_sinc_on_fwhm = True # Decide if we show the FWHM of the ideal sinc on the FWHM plot
     is_show_snr_eff = True # Decide if we show SNR efficiency (True) or absolute SNR (False)
     is_show_snr_with_const_tm = True # Decide if we want to show the effSNR for constant TM in TI and TR plots
+    is_combine_snr_plots_to_one_figure = True
 
     # Hardware / constants
     b0       = 0.35                   # [T]
@@ -91,13 +93,12 @@ def main():
         psf_max = psf_max[0]
 
     snr_arr = psf_max * np.sqrt(t_readout_arr[0])  # Have to remove first dimension readout to match them
-    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)
-    snr_eff_finitetm_corr_arr = snr_finitetm_corr_arr / np.sqrt(tm_arr[0])
+    snr_eff_arr = snr_arr / np.sqrt(tm_arr[0])
 
     best_settings_indices_masks = [
-        np.count_nonzero(snr_eff_finitetm_corr_arr == np.amax(snr_eff_finitetm_corr_arr),
-                         axis=tuple([j for j in range(snr_eff_finitetm_corr_arr.ndim) if j != i]))
-        for i in range(snr_eff_finitetm_corr_arr.ndim)]
+        np.count_nonzero(snr_eff_arr == np.amax(snr_eff_arr),
+                         axis=tuple([j for j in range(snr_eff_arr.ndim) if j != i]))
+        for i in range(snr_eff_arr.ndim)]
     best_settings_indices = [np.argmax(best_settings) for best_settings in best_settings_indices_masks]
 
     fa_optimum = fa_arr.ravel()[best_settings_indices[0]]
@@ -115,8 +116,6 @@ def main():
           f"TD = {td_optimum} ms\n"
           f"TM = {tm_optimum} ms\n"
           f"N_avg = {n_avg_optimum}\n")
-    print(f"The TM correction factor for those settings is "
-          f"{correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)[0][*best_settings_indices[1:]]:.4f}")
 
     ########################################
     # Experiment: show PSF for Variable TR #
@@ -137,14 +136,17 @@ def main():
 
     fwhm_tuple_list = [calculate_fwhm(z, psf_individual) for psf_individual in psf]
 
-    # Plot settings
+    # Plot
+    fig, ax = plt.subplots(1, 1, layout="constrained", figsize=figsize_psf)
+
     grid_kwargs = dict(which="major", axis="both")
     x_label = r"pixel coordinate $z$"
     y_label = r"$PSF$ $\left[A.U.\right]$"
     x_lim = [-3.5, 3.5]
     y_lim = [-10., 150.]
-    label_list = [f"{tr}" for tr in tr_arr.ravel()]
-    legend_title = f"$\\alpha$ = {fa}°,\n$TR$ $\\left[ms\\right]$"
+    label_list = [f"{tr:.1f}" for tr in tr_arr.ravel()]
+    #legend_title = f"$\\alpha$ = {fa}°,\n$TR$ $\\left[ms\\right]$"
+    legend_title = f"$TR$ $\\left[ms\\right]$"
     legend_kwargs = dict(loc='upper right', fancybox=True, shadow=False, framealpha=1.)
     colors = ["#0072BD","#D95319","#EDB120","#7E2F8E","#77AC30","#4DBEEE","#A2142F"]
     linestyles = ["-", "-", "-", "-", "-", "-", "-"]
@@ -160,7 +162,7 @@ def main():
         linestyles = linestyles[:(len(label_list)-1)]
         linestyles += ["--"]
     ax = basic_multiline_plot(z, psf, label_list,
-                         ax=None, figsize=figsize_psf, colors=colors, linestyles=linestyles, alphas=None,
+                         ax=ax, figsize=figsize_psf, colors=colors, linestyles=linestyles, alphas=None,
                          title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                          is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
                          x_tick_minor_spacing=None, y_tick_minor_spacing=None,
@@ -189,14 +191,20 @@ def main():
 
     fwhm_tuple_list = [calculate_fwhm(z, psf_individual) for psf_individual in psf]
 
+    # Plot
+    fig, ax = plt.subplots(1, 1, layout="constrained", figsize=figsize_psf)
+
     grid_kwargs = dict(which="major", axis="both")
     x_label = r"pixel coordinate $z$"
     y_label = r"$PSF$ $\left[A.U.\right]$"
     x_lim = [-3.5, 3.5]
     y_lim = [-10., 115.]
-    label_list = [f"{fa}" for fa in fa_arr.ravel()]
-    legend_title = f"$TR$ = {tr:.1f} ms,\n$\\alpha$ $\\left[°\\right]$"
+    label_list = [f"{fa:.0f}" for fa in fa_arr.ravel()]
+    #legend_title = f"$TR$ = {tr:.1f} ms,\n$\\alpha$ $\\left[°\\right]$"
+    legend_title = f"$\\alpha$ $\\left[°\\right]$"
     legend_kwargs = dict(loc='upper right', fancybox=True, shadow=False, framealpha=1.)
+    #legend_kwargs = dict(loc='lower center', fancybox=True, shadow=False, framealpha=1., ncol=3,
+    #                     bbox_to_anchor=(0.5, 1.05))
     colors = ["#0072BD","#D95319","#EDB120","#7E2F8E","#77AC30","#4DBEEE","#A2142F"]
     linestyles = ["-", "-", "-", "-", "-", "-", "-"]
     if is_show_sinc_on_psf:
@@ -211,7 +219,7 @@ def main():
         linestyles = linestyles[:(len(label_list)-1)]
         linestyles += ["--"]
     ax = basic_multiline_plot(z, psf, label_list,
-                         ax=None, figsize=figsize_psf, colors=colors, linestyles=linestyles, alphas=None,
+                         ax=ax, figsize=figsize_psf, colors=colors, linestyles=linestyles, alphas=None,
                          title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                          is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
                          x_tick_minor_spacing=None, y_tick_minor_spacing=None,
@@ -221,6 +229,64 @@ def main():
         x_coords = np.array([z[fwhm_tuple[1]], z[fwhm_tuple[2]]])
         y_coords = np.array([psf_individual[fwhm_tuple[1]], psf_individual[fwhm_tuple[2]]])
         ax.errorbar(x_coords, y_coords, yerr=fwhm_line_height, ecolor=color, fmt="", linestyle="")
+
+    #############################################
+    # Experiment: PSF FWHM for variable FA & TR #
+    #############################################
+
+    # Parameters
+    fa_arr = np.linspace(45., 155., num=111, endpoint=True).reshape((1, -1, 1))
+    tr_arr = np.linspace(5., 8., num=4, endpoint=True).reshape((1, 1, -1))
+    ti = 1345.  # 1300
+
+    # Calculating PSFs
+    # Need many points because now we care about width of PSF
+    psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr_arr, ti, t1a, t2a,
+                                                       inv_eff, perf, partition_coef,
+                                                       delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
+                                                       n_points_psf=1000 * n)
+    z = z[:, 0]
+    psf = psf.T
+
+    fwhm_arr = np.array([[calculate_fwhm(z, psf_fa)[0][0] for psf_fa in psf_tr] for psf_tr in psf])
+
+    # Plot
+    fig, ax = plt.subplots(1, 1, layout="constrained", figsize=figsize_fwhm)
+
+    grid_kwargs = dict(which="major", axis="both")
+    x_label = r"$\alpha$ $\left[°\right]$"
+    y_label = r"$FWHM$ of $PSF$ $\left[voxels\right]$"
+    x_lim = [np.amin(fa_arr), np.amax(fa_arr)]
+    y_lim = None
+    label_list = [f"{tr}" for tr in tr_arr.ravel()]
+    legend_title = f"$TR$ $\\left[ms\\right]$"
+    legend_kwargs = dict(loc='upper left', fancybox=True, shadow=False, framealpha=1.)
+    colors = ["#0072BD", "#D95319", "#EDB120", "#7E2F8E"]
+    linestyles = ["-", "-", "-", "-"]
+    if is_show_sinc_on_fwhm:
+        psf_sinc = np.sinc(z)
+        ideal_sinc_fwhm = calculate_fwhm(z, psf_sinc)[0][0] * np.ones((1, np.size(fa_arr)))
+        fwhm_arr = np.append(fwhm_arr, ideal_sinc_fwhm, axis=0)
+        label_list += ["Ideal Sinc"]
+        colors = colors[:(len(label_list) - 1)]
+        colors += ["darkgray"]
+        linestyles = linestyles[:(len(label_list) - 1)]
+        linestyles += ["--"]
+    ax = basic_multiline_plot(fa_arr.ravel(), fwhm_arr, label_list,
+                              ax=ax, figsize=figsize_psf, colors=colors, linestyles=linestyles, alphas=None,
+                              title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs,
+                              ticklabel_kwargs=None,
+                              is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
+                              x_tick_minor_spacing=None, y_tick_minor_spacing=None,
+                              x_scale=None, y_scale=None, x_lim=x_lim, y_lim=y_lim, labels_fontsize=labels_fontsize,
+                              legend_title=legend_title, legend_kwargs=legend_kwargs, is_show=False)
+
+    ##################################
+    # Setup Plot for SNR evaluations #
+    ##################################
+
+    #fig, axs = plt.subplots(1, 3, figsize=(3*figsize[0], figsize[1]), layout="constrained")
+    fig, axes = plt.subplots(2, 2, figsize=(2*figsize[0], 2*figsize[1]), layout="constrained")
 
     #######################################
     # Experiment: PSF SNR for variable TR #
@@ -258,59 +324,63 @@ def main():
     psf_max_arr = np.amax(psf, axis=0) # Center of PSF is the max value in each case
 
     snr_arr = psf_max_arr * np.sqrt(t_readout_arr.reshape((-1, 1))) # assumes constant TM
-    #snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)
-    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], total_t1a_arr[0], inv_eff)
-    snr_eff_finitetm_corr_arr = snr_finitetm_corr_arr / np.sqrt(tm_arr[0])
+    snr_eff_arr = snr_arr / np.sqrt(tm_arr[0])
 
     # Normalize SNR
     snr_norm_arr = snr_arr/np.amax(snr_arr, axis=0)
-    snr_finitetm_corr_norm_arr = snr_finitetm_corr_arr/np.amax(snr_finitetm_corr_arr, axis=0)
-    snr_eff_finitetm_corr_norm_arr = snr_eff_finitetm_corr_arr/np.amax(snr_eff_finitetm_corr_arr, axis=0)
+    snr_eff_norm_arr = snr_eff_arr/np.amax(snr_eff_arr, axis=0)
 
     snr_norm_for_plot_arr = snr_norm_arr.T
     if is_show_snr_eff:
-        snr_plot_arr = snr_eff_finitetm_corr_norm_arr.T
+        snr_plot_arr = snr_eff_norm_arr.T
     else:
-        snr_plot_arr = snr_finitetm_corr_norm_arr.T
+        snr_plot_arr = snr_norm_arr.T
 
     # Plot
-
+    if is_combine_snr_plots_to_one_figure:
+        #ax = axs[1]
+        ax = axes[0, 1]
+        legend_title = None
+        legend_kwargs = None
+    else:
+        ax = None
+        legend_title = "Scenario"
+        legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
     grid_kwargs = dict(which="major", axis="both")
     x_label = r"$TR$ $\left[ms\right]$"
     y_label = r"relative $effSNR_{PSF}$" if is_show_snr_eff else r"relative $SNR_{PSF}$"
     x_lim = [np.amin(tr_arr), np.amax(tr_arr)]
     y_lim = None
     label_list = ["" for i in snr_plot_arr]
-    legend_title = "Scenario"
-    legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
     colors = [None, "#D95319", None, "#77AC30", "#0072BD", "#77AC30", None, "#D95319", None]
     linestyles = ["", ":", "", ":", "-", ":", "", ":", ""]
-    if is_show_snr_with_const_tm:
+    if is_show_snr_with_const_tm and is_show_snr_eff:
         # Add normalized SNR with constant TM if desired
         snr_plot_arr = np.append(snr_plot_arr, snr_norm_for_plot_arr[[4]], axis=0)
         label_list += [""]
         colors += ["#30A2ED"]
         linestyles += ["--"]
     ax = basic_multiline_plot(tr_arr.ravel(), snr_plot_arr, label_list,
-                              ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
+                              ax=ax, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
                               title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                               is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
                               x_tick_minor_spacing=None, y_tick_minor_spacing=None,
                               x_scale=None, y_scale=None, x_lim=x_lim, y_lim=y_lim, labels_fontsize=labels_fontsize,
                               legend_title=legend_title, legend_kwargs=legend_kwargs, is_show=False)
 
-    # Define custom legend for aesthetic reasons
-    legend_handles = [
-        Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
-        Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
-               label=f"vary $T_1$ by ±{vary_factor:.0%}"),
-        Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
-               label=f"vary $T_2$ by ±{vary_factor:.0%}"),
-    ]
-    if is_show_snr_with_const_tm:
-        legend_handles.append(Line2D([0], [0], color="#30A2ED", marker=None, linestyle="--",
-                                     label="baseline (constant TM)"))
-    ax.legend(handles=legend_handles, framealpha=1.)
+    if not is_combine_snr_plots_to_one_figure:
+        # Define custom legend for aesthetic reasons
+        legend_handles = [
+            Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
+            Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
+                   label=f"vary $T_1$ by ±{vary_factor:.0%}"),
+            Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
+                   label=f"vary $T_2$ by ±{vary_factor:.0%}"),
+        ]
+        if is_show_snr_with_const_tm:
+            legend_handles.append(Line2D([0], [0], color="#30A2ED", marker=None, linestyle="--",
+                                         label="baseline (constant TM)"))
+        ax.legend(handles=legend_handles, framealpha=1.)
 
     #######################################
     # Experiment: PSF SNR for variable FA #
@@ -348,50 +418,54 @@ def main():
     psf_max_arr = np.amax(psf, axis=0) # Center of PSF is the max value in each case
 
     snr_arr = psf_max_arr * np.sqrt(t_readout) # Meaningless here, but do it for completeness
-    #snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm, t1a, inv_eff) # Meaningless here, but do it for completeness
-    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm, total_t1a_arr[0], inv_eff)
-    snr_eff_finitetm_corr_arr = snr_finitetm_corr_arr / np.sqrt(tm)
+    snr_eff_arr = snr_arr / np.sqrt(tm)
 
     # Normalize SNR
     snr_norm_arr = snr_arr/np.amax(snr_arr, axis=0)
-    snr_finitetm_corr_norm_arr = snr_finitetm_corr_arr/np.amax(snr_finitetm_corr_arr, axis=0)
-    snr_eff_finitetm_corr_norm_arr = snr_eff_finitetm_corr_arr/np.amax(snr_eff_finitetm_corr_arr, axis=0)
+    snr_eff_norm_arr = snr_eff_arr/np.amax(snr_eff_arr, axis=0)
 
     snr_norm_for_plot_arr = snr_norm_arr.T
     if is_show_snr_eff:
-        snr_plot_arr = snr_eff_finitetm_corr_norm_arr.T
+        snr_plot_arr = snr_eff_norm_arr.T
     else:
-        snr_plot_arr = snr_finitetm_corr_norm_arr.T
+        snr_plot_arr = snr_norm_arr.T
 
     # Plot
-
+    if is_combine_snr_plots_to_one_figure:
+        #ax = axs[2]
+        ax = axes[1, 0]
+        legend_title = None
+        legend_kwargs = None
+    else:
+        ax = None
+        legend_title = "Scenario"
+        legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
     grid_kwargs = dict(which="major", axis="both")
     x_label = r"$\alpha$ $\left[°\right]$"
     y_label = r"relative $effSNR_{PSF}$" if is_show_snr_eff else r"relative $SNR_{PSF}$"
     x_lim = [np.amin(fa_arr), np.amax(fa_arr)]
     y_lim = None
     label_list = ["" for i in snr_plot_arr]
-    legend_title = "Scenario"
-    legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
     colors = [None, "#D95319", None, "#77AC30", "#0072BD", "#77AC30", None, "#D95319", None]
     linestyles = ["", ":", "", ":", "-", ":", "", ":", ""]
     ax = basic_multiline_plot(fa_arr.ravel(), snr_plot_arr, label_list, #snr_norm_for_plot_arr
-                              ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
+                              ax=ax, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
                               title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
                               is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
                               x_tick_minor_spacing=None, y_tick_minor_spacing=None,
                               x_scale=None, y_scale=None, x_lim=x_lim, y_lim=y_lim, labels_fontsize=labels_fontsize,
                               legend_title=legend_title, legend_kwargs=legend_kwargs, is_show=False)
 
-    # Define custom legend for aesthetic reasons
-    legend_handles = [
-        Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
-        Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
-               label=f"vary $T_1$ by ±{vary_factor:.0%}"),
-        Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
-               label=f"vary $T_2$ by ±{vary_factor:.0%}"),
-    ]
-    ax.legend(handles=legend_handles, framealpha=1.)
+    if not is_combine_snr_plots_to_one_figure:
+        # Define custom legend for aesthetic reasons
+        legend_handles = [
+            Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
+            Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
+                   label=f"vary $T_1$ by ±{vary_factor:.0%}"),
+            Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
+                   label=f"vary $T_2$ by ±{vary_factor:.0%}"),
+        ]
+        ax.legend(handles=legend_handles, framealpha=1.)
 
     #######################################
     # Experiment: PSF SNR for variable TI #
@@ -429,34 +503,37 @@ def main():
     psf_max_arr = np.amax(psf, axis=0)  # Center of PSF is the max value in each case
 
     snr_arr = psf_max_arr * np.sqrt(t_readout)
-    #snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], t1a, inv_eff)
-    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], total_t1a_arr[0], inv_eff)
-    snr_eff_finitetm_corr_arr = snr_finitetm_corr_arr / np.sqrt(tm_arr[0])
+    snr_eff_arr = snr_arr / np.sqrt(tm_arr[0])
 
     # Normalize SNR
     snr_norm_arr = snr_arr / np.amax(snr_arr, axis=0)
-    snr_finitetm_corr_norm_arr = snr_finitetm_corr_arr / np.amax(snr_finitetm_corr_arr, axis=0)
-    snr_eff_finitetm_corr_norm_arr = snr_eff_finitetm_corr_arr / np.amax(snr_eff_finitetm_corr_arr, axis=0)
+    snr_eff_norm_arr = snr_eff_arr / np.amax(snr_eff_arr, axis=0)
 
     snr_norm_for_plot_arr = snr_norm_arr.T
     if is_show_snr_eff:
-        snr_plot_arr = snr_eff_finitetm_corr_norm_arr.T
+        snr_plot_arr = snr_eff_norm_arr.T
     else:
-        snr_plot_arr = snr_finitetm_corr_norm_arr.T
+        snr_plot_arr = snr_norm_arr.T
 
     # Plot
-
+    if is_combine_snr_plots_to_one_figure:
+        #ax = axs[0]
+        ax = axes[0, 0]
+        legend_title = None
+        legend_kwargs = None
+    else:
+        ax = None
+        legend_title = "Scenario"
+        legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
     grid_kwargs = dict(which="major", axis="both")
     x_label = r"$TI$ $\left[ms\right]$"
     y_label = r"relative $effSNR_{PSF}$" if is_show_snr_eff else r"relative $SNR_{PSF}$"
     x_lim = [np.amin(ti_arr), np.amax(ti_arr)]
     y_lim = None
     label_list = ["" for i in snr_plot_arr]
-    legend_title = "Scenario"
-    legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
     colors = [None, "#D95319", None, "#77AC30", "#0072BD", "#77AC30", None, "#D95319", None]
     linestyles = ["", ":", "", ":", "-", ":", "", ":", ""]
-    if is_show_snr_with_const_tm:
+    if is_show_snr_with_const_tm and is_show_snr_eff:
         # Add normalized SNR with constant TM if desired
         snr_plot_arr = np.append(snr_plot_arr, snr_norm_for_plot_arr[[4]], axis=0)
         label_list += [""]
@@ -464,7 +541,7 @@ def main():
         linestyles += ["--"]
     ax = basic_multiline_plot(ti_arr.ravel(), snr_plot_arr, label_list,
                               # snr_norm_for_plot_arr
-                              ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
+                              ax=ax, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
                               title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs,
                               ticklabel_kwargs=None,
                               is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
@@ -472,23 +549,52 @@ def main():
                               x_scale=None, y_scale=None, x_lim=x_lim, y_lim=y_lim, labels_fontsize=labels_fontsize,
                               legend_title=legend_title, legend_kwargs=legend_kwargs, is_show=False)
 
-    # Define custom legend for aesthetic reasons
-    legend_handles = [
-        Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
-        Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
-               label=f"vary $T_1$ by ±{vary_factor:.0%}"),
-        Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
-               label=f"vary $T_2$ by ±{vary_factor:.0%}"),
-    ]
-    if is_show_snr_with_const_tm:
-        legend_handles.append(Line2D([0], [0], color="#30A2ED", marker=None, linestyle="--",
-                                     label="baseline (constant TM)"))
-    ax.legend(handles=legend_handles, framealpha=1.)
+    if not is_combine_snr_plots_to_one_figure:
+        # Define custom legend for aesthetic reasons
+        legend_handles = [
+            Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
+            Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
+                   label=f"vary $T_1$ by ±{vary_factor:.0%}"),
+            Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
+                   label=f"vary $T_2$ by ±{vary_factor:.0%}"),
+        ]
+        if is_show_snr_with_const_tm:
+            legend_handles.append(Line2D([0], [0], color="#30A2ED", marker=None, linestyle="--",
+                                         label="baseline (constant TM)"))
+        ax.legend(handles=legend_handles, framealpha=1.)
+
+    ############################################
+    # Finalize combined plot if that is chosen #
+    ############################################
+
+    if is_combine_snr_plots_to_one_figure:
+        # Define custom legend for aesthetic reasons
+        legend_handles = [
+            Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
+            Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
+                   label=f"vary $T_1$ (by ±{vary_factor:.0%})"),
+            Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
+                   label=f"vary $T_2$ (by ±{vary_factor:.0%})"),
+        ]
+        if is_show_snr_with_const_tm:
+            legend_handles.append(Line2D([0], [0], color="#30A2ED", marker=None, linestyle="--",
+                                         label="baseline (constant TM)"))
+        # This layout is very small
+        #fig.legend(handles=legend_handles, framealpha=1., ncol=int(len(legend_handles)/2),
+        #          loc='upper center', bbox_to_anchor=(0.5, 1.00))
+        #fig.tight_layout(rect=(0,0,1,0.85))
+        # This layout is a bit better
+        axes[1, 1].set_axis_off()
+        axes[1, 1].legend(handles=legend_handles, framealpha=1., #ncol=int(len(legend_handles)/2),
+                  loc='center left', bbox_to_anchor=(-0.15, 0.50))
+        #fig.tight_layout(rect=(0,0,1,0.85))
 
     #######################################
     # Experiment: PSF SNR for variable TM #
     #######################################
 
+    # Kind of irrelevant now
+    """
     # Parameters
     fa = fa_optimum #95.
     tr = tr_optimum #7.65
@@ -521,19 +627,17 @@ def main():
     psf_max_arr = np.amax(psf, axis=0)  # Center of PSF is the max value in each case
 
     snr_arr = psf_max_arr * np.sqrt(t_readout)
-    snr_finitetm_corr_arr = snr_arr * correction_factor_for_finite_tm(tm_arr[0], total_t1a_arr[0], inv_eff)
-    snr_eff_finitetm_corr_arr = snr_finitetm_corr_arr / np.sqrt(tm_arr[0])
+    snr_eff_arr = snr_arr / np.sqrt(tm_arr[0])
 
     # Normalize SNR
     snr_norm_arr = snr_arr / np.amax(snr_arr, axis=0)
-    snr_finitetm_corr_norm_arr = snr_finitetm_corr_arr / np.amax(snr_finitetm_corr_arr, axis=0)
-    snr_eff_finitetm_corr_norm_arr = snr_eff_finitetm_corr_arr / np.amax(snr_eff_finitetm_corr_arr, axis=0)
+    snr_eff_norm_arr = snr_eff_arr / np.amax(snr_eff_arr, axis=0)
 
     snr_norm_for_plot_arr = snr_norm_arr.T
     if is_show_snr_eff:
-        snr_plot_arr = snr_eff_finitetm_corr_norm_arr.T
+        snr_plot_arr = snr_eff_norm_arr.T
     else:
-        snr_plot_arr = snr_finitetm_corr_norm_arr.T
+        snr_plot_arr = snr_norm_arr.T
 
     # Plot
 
@@ -566,54 +670,7 @@ def main():
                label=f"vary $T_2$ by ±{vary_factor:.0%}"),
     ]
     ax.legend(handles=legend_handles, framealpha=1.)
-
-    #############################################
-    # Experiment: PSF FWHM for variable FA & TR #
-    #############################################
-
-    # Parameters
-    fa_arr   = np.linspace(45., 155., num=111, endpoint=True).reshape((1, -1, 1))
-    tr_arr   = np.linspace(5., 8., num=4, endpoint=True).reshape((1, 1, -1))
-    ti   = 1345. #1300
-
-    # Calculating PSFs
-    # Need many points because now we care about width of PSF
-    psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr_arr, ti, t1a, t2a,
-                                                       inv_eff, perf, partition_coef,
-                                                       delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
-                                                       n_points_psf=1000*n)
-    z = z[:, 0]
-    psf = psf.T
-
-    fwhm_arr = np.array([[calculate_fwhm(z, psf_fa)[0][0] for psf_fa in psf_tr] for psf_tr in psf])
-
-    # Plot settings
-    grid_kwargs = dict(which="major", axis="both")
-    x_label = r"$\alpha$ $\left[°\right]$"
-    y_label = r"$FWHM$ of $PSF$ $\left[voxels\right]$"
-    x_lim = [np.amin(fa_arr), np.amax(fa_arr)]
-    y_lim = None
-    label_list = [f"{tr}" for tr in tr_arr.ravel()]
-    legend_title = f"$TR$ $\\left[ms\\right]$"
-    legend_kwargs = dict(loc='upper left', fancybox=True, shadow=False, framealpha=1.)
-    colors = ["#0072BD","#D95319","#EDB120","#7E2F8E"]
-    linestyles = ["-", "-", "-", "-"]
-    if is_show_sinc_on_fwhm:
-        psf_sinc = np.sinc(z)
-        ideal_sinc_fwhm = calculate_fwhm(z, psf_sinc)[0][0]*np.ones((1, np.size(fa_arr)))
-        fwhm_arr = np.append(fwhm_arr, ideal_sinc_fwhm, axis=0)
-        label_list += ["Ideal Sinc"]
-        colors = colors[:(len(label_list)-1)]
-        colors += ["darkgray"]
-        linestyles = linestyles[:(len(label_list)-1)]
-        linestyles += ["--"]
-    ax = basic_multiline_plot(fa_arr.ravel(), fwhm_arr, label_list,
-                         ax=None, figsize=figsize_psf, colors=colors, linestyles=linestyles, alphas=None,
-                         title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs, ticklabel_kwargs=None,
-                         is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
-                         x_tick_minor_spacing=None, y_tick_minor_spacing=None,
-                         x_scale=None, y_scale=None, x_lim=x_lim, y_lim=y_lim, labels_fontsize=labels_fontsize,
-                         legend_title=legend_title, legend_kwargs=legend_kwargs, is_show=False)
+    """
 
     plt.show()
 

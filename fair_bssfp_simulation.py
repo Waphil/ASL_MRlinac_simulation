@@ -282,6 +282,3 @@ def simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, t1a, t2a, inv_eff,
     multiplication_term = np.pow(decay_const, n_dummy_tr) * np.sin(np.deg2rad(fa/2)) * fair_magnetization_difference
 
     return (fraction_term * multiplication_term), z
-
-def correction_factor_for_finite_tm(tm, t1, inv_eff=1.0):
-    return (1 - np.exp(-tm / t1)) / (1 + (2*inv_eff - 1) * np.exp(-2 * tm / t1))
