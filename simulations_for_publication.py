@@ -71,7 +71,7 @@ def main():
         raise ValueError("The chosen configuration has no valid TRs, as the minimum simulated is above maximum allowed.")
 
     # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
-    tm_arr = ti_arr + (n + n_dummy_tr) * tr_arr + td_arr
+    tm_arr = ti_arr + (n + n_dummy_tr + 1./2.) * tr_arr + td_arr
 
     # Calculate maximum number of averages (each average is 1 tag & 1 control image) without exceeding total acq. time
     #n_avg_arr = np.floor(t_total / (2*tm_arr) - n_dummy_tm)
@@ -311,7 +311,7 @@ def main():
     total_t2a_arr = np.reshape(total_t2a_arr, (1, 1, -1))
 
     # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
-    tm_arr = ti + (n + n_dummy_tr) * tr_arr + td
+    tm_arr = ti + (n + n_dummy_tr + 1./2.) * tr_arr + td
     #tm_arr = np.maximum(tm_arr, np.amax(tm_arr)) # Experiment: show same TM for all images (the max)
 
     # Calculating PSFs
@@ -406,7 +406,7 @@ def main():
     total_t2a_arr = np.reshape(total_t2a_arr, (1, 1, -1))
 
     # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
-    tm = ti + (n + n_dummy_tr) * tr + td
+    tm = ti + (n + n_dummy_tr + 1./2.) * tr + td
 
     # Calculating PSFs
     # few points to make it computationally manageable. We only care about center here anyway.
@@ -490,7 +490,7 @@ def main():
     total_t2a_arr = np.reshape(total_t2a_arr, (1, 1, -1))
 
     # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
-    tm_arr = ti_arr + (n + n_dummy_tr) * tr + td
+    tm_arr = ti_arr + (n + n_dummy_tr + 1./2.) * tr + td
     #tm_arr = np.maximum(tm_arr, np.amax(tm_arr)) # Experiment: show same TM for all images (the max)
 
     # Calculating PSFs
@@ -614,7 +614,7 @@ def main():
     total_t2a_arr = np.reshape(total_t2a_arr, (1, 1, -1))
 
     # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
-    tm_arr = ti + (n + n_dummy_tr) * tr + td_arr
+    tm_arr = ti + (n + n_dummy_tr + 1./2.) * tr + td_arr
     #tm_arr = np.maximum(tm_arr, np.amax(tm_arr)) # Experiment: show same TM for all images (the max)
 
     # Calculating PSFs
