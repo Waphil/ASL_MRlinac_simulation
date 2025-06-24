@@ -2,7 +2,8 @@ import numpy as np
 
 def simulate_fair_magnetization_difference(m0, inv_eff, perf, t, delta_t, tau, t1a, q_func=None):
     """
-    TODO: description
+    Simulate the magnetization difference in FAIR between the control and label images. Implementation based on
+    Martirosian et al. (2010) (DOI: 10.1007/s00259-010-1456-7)
     :param m0: float: equilibrium magnetization
     :param inv_eff: float: inversion efficiency
     :param perf: float: perfusion [ml/100 g/min]
@@ -12,32 +13,25 @@ def simulate_fair_magnetization_difference(m0, inv_eff, perf, t, delta_t, tau, t
     :param t1a: float: longitudinal relaxation time of arterial blood [ms]
     :param q_func: float or function where t is plugged in: correction factor (normally close to unity, which is the
     default)
-    :return: float: magnetization difference between control and tag pulse in FAIR bSSFP ASL experiment
+    :return: float: magnetization difference between control and tag pulse in FAIR ASL experiment
     """
-    # TODO: Why is blood partition coeff not here?
     if q_func is None: # If no q function is provided, assume that it is unity
         q_func = lambda t: 1.
     elif isinstance(q_func, (int, float, complex)):
         # If q_func is a number turn it into a function that returns just the number
         q_func = lambda t: q_func
 
-    # Three different regimes as defined in Martirosian, et al. eq. (3)
-    time_factor = np.zeros_like(t)#(t + delta_t + tau) # TODO: Investigate making delta_t and tau usable
+    # Three different regimes as defined in Martirosian, et al. (2010) eq. (3)
+    time_factor = np.zeros_like(t) # TODO: Adjust array size based on delta_t and tau
     np.putmask(time_factor, t <= (delta_t + tau), t - delta_t)
     np.putmask(time_factor, t > (delta_t + tau), tau)
     np.putmask(time_factor, t < delta_t, 0)
-    """if t < delta_t:
-        time_factor = 0.
-    elif t < delta_t + tau:
-        time_factor = t - delta_t
-    else:
-        time_factor = tau"""
     return 2 * inv_eff * m0 * perf * time_factor * np.exp(-t/t1a) * q_func(t)
 
 
 def simulate_fair_magnetization_difference_quipss2(m0, inv_eff, perf, partition_coef, ti, ti1, t1a):
-    # Difference calculated by Martirosian, et al. eq. (4)
-    return 2 * inv_eff * m0 * perf / partition_coef * ti1 * np.exp(-ti/t1a) # TODO: find better way of dealing with quipss
+    # Difference calculated by Martirosian, et al. (2010) eq. (4)
+    return 2 * inv_eff * m0 * perf / partition_coef * ti1 * np.exp(-ti/t1a)
 
 def simulate_bssfp_steady(m0, fa, tr, te, t1, t2, is_simple=False):
     """
@@ -136,7 +130,7 @@ def simulate_bssfp_psf(m0, m, fa, tr, t1, t2, n_dummy_tr, n_tr):
 
     multiplication_term = np.pow(decay_const, n_dummy_tr) * (m * np.sin(np.deg2rad(fa/2))-m_steadystate)
 
-    addition_term = m_steadystate * np.sinc(z) # TODO: check about pi in sinc or not
+    addition_term = m_steadystate * np.sinc(z) # Sinc is normalized, so it contains pi.
 
     return (fraction_term * multiplication_term + addition_term), z
 
@@ -165,45 +159,7 @@ def calculate_centric_bssfp_psf_large_fraction(z, decay_const, n_tr):
 
     return fraction_term
 
-def simulate_bssfp_steady_with_inversion(m0, fa, tr, te, ti, t1, t2): # TODO: check
-    # IR-TrueFISP Steady-State Signal calculation
-    # Uses the TrueFISP function and simple inversion recovery
-    return (1 - 2*np.exp(-ti/t1)) * simulate_bssfp_steady(m0, fa, tr, te, t1, t2, is_simple=False)
-
-def simulate_bssfp_transient_with_inversion(m0, m, fa, tr, te, ti, t1, t2, n_dummy_tr, n_tr, os_factor): #TODO: check
-    # IR-TrueFISP Transient Signal calculation
-    # Uses the TrueFISP_trans function and simple inversion recovery
-    m0_inv = m0 - (m0 + m) * np.exp(-ti / t1)
-    return simulate_bssfp_transient(m0, m0_inv, fa, tr, te, t1, t2, n_dummy_tr, n_tr, os_factor)
-
-def simulate_magnetization_multiple_inversions(m0, tr, ti, t1, td, n_avg, n_tr, os_factor):
-    # FAIR-TrueFISP Magnetization Evolution over multiple repetitions
-    tr2 = ti + (1 + os_factor) * n_tr * tr + td # TODO: check if we should simply use TR2
-
-    m_arr = np.zeros((np.size(td), n_avg))
-    m_arr[:, 0] = m0
-    for n in range(1, n_avg):
-        m_arr[:, n] = m0 - (m0 - m_arr[:, n-1]) * np.exp(-2*tr2/t1)
-
-    return m_arr
-
-def simulate_bssfp_inversion_longerm_steadystate(m0, fa, tr, te, ti, t1, t2, td, n_avg, phi):
-    # IR - TrueFISP Steady - State Signal calculation over multiple repetitions according to:
-    # - Schmitt et al. (DOI 10.1002/mrm.20738) (To get Mz after readout)
-    # Uses the InvTrueFISP function
-
-    s_arr = np.zeros((np.size(td), n_avg))
-    m0_arr = np.zeros((np.size(td), n_avg))
-    m0_arr[:, 0] = m0
-    for n in range(1, n_avg):
-        m0_arr[:, n] = m0 - (m0 - s_arr[:, n-1] / np.tan(np.deg2rad(fa / 2)) * np.cos(phi/2) * np.exp(-td/t1))
-        #m0_arr(:, n) = M0 - (M0 - S(:, n-1) / tand(FA / 2) * cos(phi / 2)).*exp(-TD'/T1); # (Schmitt et al.)
-
-        s_arr[:, n] = simulate_bssfp_steady_with_inversion(m0_arr[:, n], fa, tr, te, ti, t1, t2)
-
-    return s_arr, m0_arr
-
-def simulate_fair_bssfp_signal_difference(m0, fa, tr, ti, t1a, t2a, inv_eff, perf, partition_coef, delta_t, tau,
+def simulate_fair_bssfp_signal_difference(m0, fa, tr, ti, t1a, t2a, inv_eff, perf, delta_t, tau,
                                           q_func=None, n_dummy_tr=0):
     """
     Calculates difference of arterial blood signal between control and tag. Uses PASL and bSSFP signal functions.
@@ -218,13 +174,12 @@ def simulate_fair_bssfp_signal_difference(m0, fa, tr, ti, t1a, t2a, inv_eff, per
     :param t2a: float: transversal relaxation time of arterial blood [ms]
     :param inv_eff: float: inversion efficiency
     :param perf: float: perfusion [ml/100 g/min]
-    :param partition_coef: float: blood-tissue partition coefficient [ml/g]
     :param delta_t: float: transit time [ms]
     :param tau: trailing time [ms]
-    :param q: float: correction factor (normally close to unity, which is the default)
+    :param q_func: float or function where t is plugged in: correction factor (normally close to unity, which is the
+    default)
     :return:
     """
-    # TODO: Deal with this funciton or delete it. It uses QUIPSS in Philip's implementation, but we don't want that.
     # Calculate decay constant (called lambda in Zhu & Qin's publication)
     decay_const = calculate_bssfp_decay_const(fa, tr, t1a, t2a)
     # Calculate the longitudinal magnetization difference between tag and control at the start of the bSSFP readout
@@ -235,10 +190,11 @@ def simulate_fair_bssfp_signal_difference(m0, fa, tr, ti, t1a, t2a, inv_eff, per
 
     return multiplication_term
 
-def simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, t1a, t2a, inv_eff, perf, partition_coef, delta_t, tau,
+def simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, t1a, t2a, inv_eff, perf, delta_t, tau,
                                               q_func=None, n_dummy_tr=0, n_tr=96, n_points_psf=None):
     """
-
+    Calculates difference of arterial blood signal between control and tag. Uses PASL and bSSFP signal functions.
+    Estimates the signal difference as the center of the PSF.
     :param m0: float: equilibrium magnetization
     :param fa: float: Flip angle [°]
     :param tr: float: repetition time [ms]
@@ -247,7 +203,6 @@ def simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, t1a, t2a, inv_eff,
     :param t2a: float: transversal relaxation time of arterial blood [ms]
     :param inv_eff: float: inversion efficiency
     :param perf: float: perfusion [ml/100 g/min]
-    :param partition_coef: float: blood-tissue partition coefficient [ml/g]
     :param delta_t: float: transit time [ms]
     :param tau: trailing time [ms]
     :param q_func: float or function where ti is plugged in: correction factor (normally close to unity, which is the
@@ -258,7 +213,6 @@ def simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, t1a, t2a, inv_eff,
     FWHM you need more
     :return:
     """
-    # TODO: check the fact that there is no partition coeff here.
     if n_points_psf is None:
         n_points_psf = 100*n_tr+1
 

@@ -81,14 +81,14 @@ def main():
 
     if is_optimize_based_on_psf:
         psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr_arr, ti_arr, t1a, t2a, inv_eff, perf,
-                                                           partition_coef, delta_t, tau, q_func=None,
+                                                           delta_t, tau, q_func=None,
                                                            n_dummy_tr=n_dummy_tr, n_tr=n, n_points_psf=3)
         z = z.reshape((-1,))
         psf_max = np.amax(psf, axis=0)
     else:
         # Need to call it max psf to be compatible with
         psf_max = simulate_fair_bssfp_signal_difference(m0, fa_arr, tr_arr, ti_arr, t1a, t2a, inv_eff, perf,
-                                                        partition_coef, delta_t, tau, q_func=None,
+                                                        delta_t, tau, q_func=None,
                                                         n_dummy_tr=n_dummy_tr)
         psf_max = psf_max[0]
 
@@ -114,7 +114,7 @@ def main():
           f"TR = {tr_optimum:.2f} ms\n"
           f"TI = {ti_optimum} ms\n"
           f"TD = {td_optimum} ms\n"
-          f"TM = {tm_optimum} ms\n"
+          f"TM = {tm_optimum:.2f} ms\n"
           f"N_avg = {n_avg_optimum}\n")
 
     ########################################
@@ -128,7 +128,7 @@ def main():
     td       = td_optimum #0.
 
     # Calculating PSFs
-    psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr_arr, ti, t1a, t2a, inv_eff, perf, partition_coef,
+    psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr_arr, ti, t1a, t2a, inv_eff, perf,
                                                        delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
                                                        n_points_psf=None)
     z = z[:, 0]
@@ -183,7 +183,7 @@ def main():
     ti       = ti_optimum #1345.
     td       = td_optimum #0.
 
-    psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr, ti, t1a, t2a, inv_eff, perf, partition_coef,
+    psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr, ti, t1a, t2a, inv_eff, perf,
                                                        delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr_arr, n_tr=n,
                                                        n_points_psf=None)
     z = z[:, 0]
@@ -242,7 +242,7 @@ def main():
     # Calculating PSFs
     # Need many points because now we care about width of PSF
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr_arr, ti, t1a, t2a,
-                                                       inv_eff, perf, partition_coef,
+                                                       inv_eff, perf,
                                                        delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
                                                        n_points_psf=1000 * n)
     z = z[:, 0]
@@ -285,7 +285,6 @@ def main():
     # Setup Plot for SNR evaluations #
     ##################################
 
-    #fig, axs = plt.subplots(1, 3, figsize=(3*figsize[0], figsize[1]), layout="constrained")
     fig, axes = plt.subplots(2, 2, figsize=(2*figsize[0], 2*figsize[1]), layout="constrained")
 
     #######################################
@@ -317,7 +316,7 @@ def main():
     # Calculating PSFs
     # few points to make it computationally manageable. We only care about center here anyway.
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr_arr, ti, total_t1a_arr, total_t2a_arr,
-                                                       inv_eff, perf, partition_coef,
+                                                       inv_eff, perf,
                                                        delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
                                                        n_points_psf=3)
     z = z[:, 0]
@@ -411,7 +410,7 @@ def main():
     # Calculating PSFs
     # few points to make it computationally manageable. We only care about center here anyway.
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa_arr, tr, ti, total_t1a_arr, total_t2a_arr,
-                                                       inv_eff, perf, partition_coef,
+                                                       inv_eff, perf,
                                                        delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
                                                        n_points_psf=3)
     z = z[:, 0]
@@ -491,12 +490,11 @@ def main():
 
     # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
     tm_arr = ti_arr + (n + n_dummy_tr + 1./2.) * tr + td
-    #tm_arr = np.maximum(tm_arr, np.amax(tm_arr)) # Experiment: show same TM for all images (the max)
 
     # Calculating PSFs
     # few points to make it computationally manageable. We only care about center here anyway.
     psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti_arr, total_t1a_arr, total_t2a_arr,
-                                                       inv_eff, perf, partition_coef,
+                                                       inv_eff, perf,
                                                        delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
                                                        n_points_psf=3)
     z = z[:, 0]
@@ -579,98 +577,9 @@ def main():
         if is_show_snr_with_const_tm:
             legend_handles.append(Line2D([0], [0], color="#30A2ED", marker=None, linestyle="--",
                                          label="baseline (constant TM)"))
-        # This layout is very small
-        #fig.legend(handles=legend_handles, framealpha=1., ncol=int(len(legend_handles)/2),
-        #          loc='upper center', bbox_to_anchor=(0.5, 1.00))
-        #fig.tight_layout(rect=(0,0,1,0.85))
-        # This layout is a bit better
         axes[1, 1].set_axis_off()
         axes[1, 1].legend(handles=legend_handles, framealpha=1., #ncol=int(len(legend_handles)/2),
                   loc='center left', bbox_to_anchor=(-0.15, 0.50))
-        #fig.tight_layout(rect=(0,0,1,0.85))
-
-    #######################################
-    # Experiment: PSF SNR for variable TM #
-    #######################################
-
-    # Kind of irrelevant now
-    """
-    # Parameters
-    fa = fa_optimum #95.
-    tr = tr_optimum #7.65
-    ti = ti_optimum #1345.
-    td_arr = np.linspace(0., 800., num=801, endpoint=True).reshape((1, -1, 1))
-
-    # Calculate the array corresponding to readout time (tr - t_grad), which is the inverse of the pixelBW
-    t_readout = (tr - t_grad)
-
-    # Relaxation Parameter Variability
-    vary_factor = 0.1
-    t1a_arr = (1 + vary_factor * np.array([-1, 0, 1])) * t1a
-    t2a_arr = (1 + vary_factor * np.array([-1, 0, 1])) * t2a
-
-    total_t1a_arr, total_t2a_arr = np.meshgrid(t1a_arr, t2a_arr)
-    total_t1a_arr = np.reshape(total_t1a_arr, (1, 1, -1))
-    total_t2a_arr = np.reshape(total_t2a_arr, (1, 1, -1))
-
-    # Total measurement time is time for inversion + rf pulses (including dummy) + dead time
-    tm_arr = ti + (n + n_dummy_tr + 1./2.) * tr + td_arr
-    #tm_arr = np.maximum(tm_arr, np.amax(tm_arr)) # Experiment: show same TM for all images (the max)
-
-    # Calculating PSFs
-    # few points to make it computationally manageable. We only care about center here anyway.
-    psf, z = simulate_fair_bssfp_signal_difference_psf(m0, fa, tr, ti, total_t1a_arr, total_t2a_arr,
-                                                       inv_eff, perf, partition_coef,
-                                                       delta_t, tau, q_func=None, n_dummy_tr=n_dummy_tr, n_tr=n,
-                                                       n_points_psf=3)
-    z = z[:, 0]
-    psf_max_arr = np.amax(psf, axis=0)  # Center of PSF is the max value in each case
-
-    snr_arr = psf_max_arr * np.sqrt(t_readout)
-    snr_eff_arr = snr_arr / np.sqrt(tm_arr[0])
-
-    # Normalize SNR
-    snr_norm_arr = snr_arr / np.amax(snr_arr, axis=0)
-    snr_eff_norm_arr = snr_eff_arr / np.amax(snr_eff_arr, axis=0)
-
-    snr_norm_for_plot_arr = snr_norm_arr.T
-    if is_show_snr_eff:
-        snr_plot_arr = snr_eff_norm_arr.T
-    else:
-        snr_plot_arr = snr_norm_arr.T
-
-    # Plot
-
-    grid_kwargs = dict(which="major", axis="both")
-    x_label = r"$TM$ $\left[ms\right]$"
-    y_label = r"relative $effSNR_{PSF}$" if is_show_snr_eff else r"relative $SNR_{PSF}$"
-    x_lim = [np.amin(tm_arr), np.amax(tm_arr)]
-    y_lim = None
-    label_list = ["" for i in snr_plot_arr]
-    legend_title = "Scenario"
-    legend_kwargs = dict(loc='lower right', fancybox=True, shadow=False, framealpha=1.)
-    colors = [None, "#D95319", None, "#77AC30", "#0072BD", "#77AC30", None, "#D95319", None]
-    linestyles = ["", ":", "", ":", "-", ":", "", ":", ""]
-    ax = basic_multiline_plot(tm_arr.ravel(), snr_plot_arr, label_list,
-                              # snr_norm_for_plot_arr
-                              ax=None, figsize=figsize, colors=colors, linestyles=linestyles, alphas=None,
-                              title=None, x_label=x_label, y_label=y_label, grid_kwargs=grid_kwargs,
-                              ticklabel_kwargs=None,
-                              is_use_scalar_formatter=False, x_tick_major_spacing=None, y_tick_major_spacing=None,
-                              x_tick_minor_spacing=None, y_tick_minor_spacing=None,
-                              x_scale=None, y_scale=None, x_lim=x_lim, y_lim=y_lim, labels_fontsize=labels_fontsize,
-                              legend_title=legend_title, legend_kwargs=legend_kwargs, is_show=False)
-
-    # Define custom legend for aesthetic reasons
-    legend_handles = [
-        Line2D([0], [0], color="#0072BD", marker=None, linestyle="-", label="baseline"),
-        Line2D([0], [0], color="#77AC30", marker=None, linestyle=":",
-               label=f"vary $T_1$ by ±{vary_factor:.0%}"),
-        Line2D([0], [0], color="#D95319", marker=None, linestyle=":",
-               label=f"vary $T_2$ by ±{vary_factor:.0%}"),
-    ]
-    ax.legend(handles=legend_handles, framealpha=1.)
-    """
 
     plt.show()
 

@@ -10,11 +10,9 @@ def t1a_estimate(b0, model_id):
     :param model_id: int: slected model. 1 for Zhang, 2 for Rooney, 3 for Hales
     :return: T1 of arterial blood [ms]
     """
-
     if model_id == 1:
         # Fit based on 1.5T, 3T, 7T data (Zhang et al.)
         t1 = 110 * b0 + 1316
-        #t1 = np.around(t1) # TODO: think about if I want to remove the rounding. Philip had it.
         return t1
     elif model_id == 2:
         # (Rooney et al.)
@@ -22,7 +20,6 @@ def t1a_estimate(b0, model_id):
         b = 0.340
         gamma = 42.58*1e6 # (gyromagnetic ratio)
         t1 = a*np.pow(gamma*b0, b)
-        #t1 = np.around(t1) # TODO: think about if I want to remove the rounding. Philip had it.
         return t1
     elif model_id == 3:
         # Model between 1.5T and 7T.
@@ -33,15 +30,14 @@ def t1a_estimate(b0, model_id):
         R1p = fe * (1.099 - 0.057 * b0 + 0.033 * Hb * (1 - Y)) + (1 - fe) * (0.496 - 0.023 * b0)
         dT1 = 108 #[ms] (in vivo correction)
         t1 = 1000. / R1p + dT1
-        #t1 = np.around(t1) # TODO: think about if I want to remove the rounding. Philip had it.
         return t1
 
 def t2a_estimate(b0, model_id):
     """
-
-    :param b0:
-    :param model_id:
-    :return:
+    Arterial blood T2 estimation for different B0 field strengths.
+    :param b0: float: Primary magnetic field strength in T.
+    :param model_id: int: Index of model to be used. 1 for Brooks, 2 for Thomas.
+    :return: T2 of arterial blood [ms]
     """
     if model_id == 1:
         # Value measured in Brooks et al. (10.1002/jmri.1880050414)
@@ -55,7 +51,6 @@ def t2a_estimate(b0, model_id):
         T20 = 270. # [ms](intrinsic T2 of blood)
         R2 = 1000. / T20 + (0.25 * np.pow(b0 / 0.2, 1.5)) * Y * Y # (approximated)
         T2 = 1000. / R2
-        #T2 = np.around(T2) # TODO: think about if I want to remove the rounding. Philip had it.
         return T2
 
 def calculate_fwhm(x_arr, y_arr):
